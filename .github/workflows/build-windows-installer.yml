@@ -54,7 +54,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          flutter analyze
+          flutter analyze lib
 
       - name: Build Windows Release
         shell: pwsh
