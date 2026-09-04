@@ -45,6 +45,16 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (Test-Path 'windows') { Remove-Item 'windows' -Recurse -Force }
           flutter create --platforms=windows --project-name preventivi_app .
+
+          - name: Remove generated Flutter sample test
+            shell: pwsh
+            run: |
+              $ErrorActionPreference = 'Stop'
+              if (Test-Path "test/widget_test.dart") { Remove-Item -Force "test/widget_test.dart" }
+              if (Test-Path "test") {
+                $items = Get-ChildItem "test" -Force
+                if (-not $items) { Remove-Item -Force "test" }
+              }
           if (-not (Test-Path 'windows\CMakeLists.txt')) { throw 'Configurazione Windows non generata.' }
 
       - name: Install dependencies
