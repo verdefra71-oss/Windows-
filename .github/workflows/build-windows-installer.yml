@@ -1,0 +1,135 @@
+name: Build Preventivi Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    env:
+      CMAKE_GENERATOR: Visual Studio 17 2022
+      CMAKE_GENERATOR_PLATFORM: x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Flutter project
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\pubspec.yaml")) { throw 'pubspec.yaml non trovato nella radice del repository.' }
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\lib\main.dart")) { throw 'lib/main.dart non trovato.' }
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\assets\logo.png")) { throw 'assets/logo.png non trovato.' }
+          Write-Host 'Progetto Flutter trovato nella radice del repository.'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: stable
+          cache: true
+
+      - name: Enable Windows
+        shell: pwsh
+        run: flutter config --enable-windows-desktop
+
+      - name: Prepare Windows project
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path 'windows') { Remove-Item 'windows' -Recurse -Force }
+          flutter create --platforms=windows --project-name preventivi_app .
+          if (-not (Test-Path 'windows\CMakeLists.txt')) { throw 'Configurazione Windows non generata.' }
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter analyze lib
+
+      - name: Verify Visual Studio 2022
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        if (-not (Test-Path $vswhere)) { throw "vswhere.exe non trovato." }
+        $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if (-not $vs) { throw "Visual Studio 2022 con C++ Desktop non trovato." }
+        Write-Host "Visual Studio trovato: $vs"
+
+    - name: Clean CMake cache
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
+        if (Test-Path "windows\flutter\ephemeral") { Remove-Item -Recurse -Force "windows\flutter\ephemeral" }
+        Get-ChildItem -Path "windows" -Filter "CMakeCache.txt" -Recurse -ErrorAction SilentlyContinue |
+          Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path "windows" -Filter "CMakeFiles" -Directory -Recurse -ErrorAction SilentlyContinue |
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+    - name: Build Windows Release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter clean
+          flutter pub get
+          $env:CMAKE_GENERATOR = 'Visual Studio 17 2022'
+          $env:CMAKE_GENERATOR_PLATFORM = 'x64'
+          flutter build windows --release
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $env:GITHUB_WORKSPACE 'build\windows\x64\runner\Release'
+          if (-not (Test-Path $release)) { throw "Release non trovata: $release" }
+          $exe = Join-Path $release 'preventivi_app.exe'
+          if (-not (Test-Path $exe)) {
+            $candidate = Get-ChildItem $release -Filter '*.exe' -File | Select-Object -First 1
+            if (-not $candidate) { throw 'Nessun EXE trovato nella Release.' }
+            Copy-Item $candidate.FullName $exe -Force
+          }
+          "WINDOWS_RELEASE_DIR=$release" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "EXE: $exe"
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Compress-Archive -Path "$env:WINDOWS_RELEASE_DIR\*" -DestinationPath "$env:GITHUB_WORKSPACE\Preventivi-Windows-Portable.zip" -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = '${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { $iscc = '${env:ProgramFiles}\Inno Setup 6\ISCC.exe' }
+          if (-not (Test-Path $iscc)) { throw 'ISCC.exe non trovato.' }
+          & $iscc /DReleaseDir="$env:WINDOWS_RELEASE_DIR" /DMyAppVersion='1.0.0' "$env:GITHUB_WORKSPACE\installer\Preventivi.iss"
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'installer\Output\Preventivi-Setup.exe'
+          if (-not (Test-Path $setup)) { throw 'Preventivi-Setup.exe non generato.' }
+          Copy-Item $setup "$env:GITHUB_WORKSPACE\Preventivi-Setup.exe" -Force
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Preventivi-Windows-Installer
+          path: |
+            Preventivi-Setup.exe
+            Preventivi-Windows-Portable.zip
+          if-no-files-found: error
+          compression-level: 0
