@@ -1,41 +1,34 @@
 #define MyAppName "Preventivi"
-#define MyAppPublisher "Preventivi"
-#define MyAppExeName "preventivi_app.exe"
 #ifndef MyAppVersion
   #define MyAppVersion "1.0.0"
 #endif
+#ifndef ReleaseDir
+  #define ReleaseDir "build\windows\x64\runner\Release"
+#endif
+#define MyAppExeName "preventivi_app.exe"
 
 [Setup]
-AppId={{A5A4B0B9-7A3D-4D73-8E1D-5B4D8C8E5E20}
+AppId={{A7F4B6A5-5B0E-4C4A-9C3B-7E3C7E8D2B11}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\Preventivi
 DefaultGroupName=Preventivi
-DisableProgramGroupPage=yes
-OutputDir=..\dist
+OutputDir=Output
 OutputBaseFilename=Preventivi-Setup
-Compression=lzma2/max
+Compression=lzma
 SolidCompression=yes
-WizardStyle=modern
-ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=..\assets\app_icon.ico
-
-[Languages]
-Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
+UninstallDisplayIcon={app}\{#MyAppExeName}
+WizardStyle=modern
 
 [Files]
-Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Preventivi"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\Preventivi"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\Preventivi"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\Preventivi"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Avvia Preventivi"; Flags: nowait postinstall skipifsilent
-
-[UninstallDelete]
-Type: filesandordirs; Name: "{app}\data"
