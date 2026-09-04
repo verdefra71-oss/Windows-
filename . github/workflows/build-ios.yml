@@ -1,0 +1,302 @@
+name: Build and upload Preventivi iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build signed iOS IPA and upload to App Store Connect
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find Flutter project
+        shell: bash
+        run: |
+          set -e
+          if [ -f "pubspec.yaml" ]; then
+            APP_DIR="."
+          else
+            APP_DIR="$(find . -name pubspec.yaml -not -path '*/.dart_tool/*' -print -quit | xargs -r dirname)"
+          fi
+          if [ -z "$APP_DIR" ] || [ ! -f "$APP_DIR/pubspec.yaml" ]; then
+            echo "Errore: pubspec.yaml non trovato" >&2
+            exit 1
+          fi
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+
+      - name: Prepare Flutter iOS project
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        env:
+          IOS_BUNDLE_IDENTIFIER: ${{ secrets.IOS_BUNDLE_IDENTIFIER }}
+        run: |
+          set -e
+          if [ -z "$IOS_BUNDLE_IDENTIFIER" ]; then
+            echo "Manca il secret IOS_BUNDLE_IDENTIFIER" >&2
+            exit 1
+          fi
+          flutter create --platforms=ios --project-name preventivi_app .
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          bundle = os.environ['IOS_BUNDLE_IDENTIFIER']
+          p = Path('ios/Runner.xcodeproj/project.pbxproj')
+          s = p.read_text()
+          s = s.replace('PRODUCT_BUNDLE_IDENTIFIER = com.example.preventiviApp;', f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};')
+          s = s.replace('PRODUCT_BUNDLE_IDENTIFIER = preventivi_app;', f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};')
+          p.write_text(s)
+          # Also set the bundle id in the generated xcconfig if present.
+          for q in [Path('ios/Flutter/Release.xcconfig'), Path('ios/Flutter/Debug.xcconfig')]:
+              if q.exists():
+                  t = q.read_text()
+                  if 'PRODUCT_BUNDLE_IDENTIFIER' not in t:
+                      t += f'\nPRODUCT_BUNDLE_IDENTIFIER = {bundle}\n'
+                      q.write_text(t)
+          PY
+          grep -q "PRODUCT_BUNDLE_IDENTIFIER = $IOS_BUNDLE_IDENTIFIER;" ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Install Flutter dependencies
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter pub get
+
+      - name: Prepare iOS AppIcon files
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          ICON_SRC="assets/app_icon.png"
+          ICON_DIR="ios/Runner/Assets.xcassets/AppIcon.appiconset"
+          test -f "$ICON_SRC"
+          mkdir -p "$ICON_DIR"
+
+          # Create every App Store icon size directly with macOS sips.
+          make_icon() {
+            local size="$1"
+            local name="$2"
+            sips -z "$size" "$size" "$ICON_SRC" --out "$ICON_DIR/$name" >/dev/null
+          }
+
+          make_icon 40   Icon-App-20x20@2x.png
+          make_icon 60   Icon-App-20x20@3x.png
+          make_icon 58   Icon-App-29x29@2x.png
+          make_icon 87   Icon-App-29x29@3x.png
+          make_icon 80   Icon-App-40x40@2x.png
+          make_icon 120  Icon-App-40x40@3x.png
+          make_icon 120  Icon-App-60x60@2x.png
+          make_icon 180  Icon-App-60x60@3x.png
+          make_icon 152  Icon-App-76x76@2x.png
+          make_icon 167  Icon-App-83.5x83.5@2x.png
+          make_icon 1024 Icon-App-1024x1024@1x.png
+
+          # Some Xcode templates refer to the 1x files too. Generate them explicitly.
+          make_icon 20   Icon-App-20x20@1x.png
+          make_icon 29   Icon-App-29x29@1x.png
+          make_icon 40   Icon-App-40x40@1x.png
+          make_icon 60   Icon-App-60x60@1x.png
+          make_icon 76   Icon-App-76x76@1x.png
+
+          cat > "$ICON_DIR/Contents.json" <<'JSON'
+          {
+            "images" : [
+              {"filename":"Icon-App-20x20@1x.png","idiom":"iphone","scale":"1x","size":"20x20"},
+              {"filename":"Icon-App-20x20@2x.png","idiom":"iphone","scale":"2x","size":"20x20"},
+              {"filename":"Icon-App-20x20@3x.png","idiom":"iphone","scale":"3x","size":"20x20"},
+              {"filename":"Icon-App-29x29@1x.png","idiom":"iphone","scale":"1x","size":"29x29"},
+              {"filename":"Icon-App-29x29@2x.png","idiom":"iphone","scale":"2x","size":"29x29"},
+              {"filename":"Icon-App-29x29@3x.png","idiom":"iphone","scale":"3x","size":"29x29"},
+              {"filename":"Icon-App-40x40@1x.png","idiom":"iphone","scale":"1x","size":"40x40"},
+              {"filename":"Icon-App-40x40@2x.png","idiom":"iphone","scale":"2x","size":"40x40"},
+              {"filename":"Icon-App-40x40@3x.png","idiom":"iphone","scale":"3x","size":"40x40"},
+              {"filename":"Icon-App-60x60@2x.png","idiom":"iphone","scale":"2x","size":"60x60"},
+              {"filename":"Icon-App-60x60@3x.png","idiom":"iphone","scale":"3x","size":"60x60"},
+              {"filename":"Icon-App-20x20@1x.png","idiom":"ipad","scale":"1x","size":"20x20"},
+              {"filename":"Icon-App-20x20@2x.png","idiom":"ipad","scale":"2x","size":"20x20"},
+              {"filename":"Icon-App-29x29@1x.png","idiom":"ipad","scale":"1x","size":"29x29"},
+              {"filename":"Icon-App-29x29@2x.png","idiom":"ipad","scale":"2x","size":"29x29"},
+              {"filename":"Icon-App-40x40@1x.png","idiom":"ipad","scale":"1x","size":"40x40"},
+              {"filename":"Icon-App-40x40@2x.png","idiom":"ipad","scale":"2x","size":"40x40"},
+              {"filename":"Icon-App-76x76@1x.png","idiom":"ipad","scale":"1x","size":"76x76"},
+              {"filename":"Icon-App-76x76@2x.png","idiom":"ipad","scale":"2x","size":"76x76"},
+              {"filename":"Icon-App-83.5x83.5@2x.png","idiom":"ipad","scale":"2x","size":"83.5x83.5"},
+              {"filename":"Icon-App-1024x1024@1x.png","idiom":"ios-marketing","scale":"1x","size":"1024x1024"}
+            ],
+            "info" : {"author":"xcode","version":1}
+          }
+          JSON
+
+          # Ensure Xcode sees the icon set as the primary app icon.
+          PLIST="ios/Runner/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleIcons" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleIcons~ipad" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles: string AppIcon60x60" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName string AppIcon" "$PLIST"
+          echo "AppIcon iOS creato correttamente:"
+          ls -1 "$ICON_DIR"
+
+      - name: Install CocoaPods dependencies
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Import Apple distribution certificate
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -e
+          for v in BUILD_CERTIFICATE_BASE64 P12_PASSWORD KEYCHAIN_PASSWORD; do
+            if [ -z "${!v}" ]; then echo "Manca il secret $v" >&2; exit 1; fi
+          done
+          CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          rm -f "$CERTIFICATE_PATH"
+
+      - name: Install provisioning profile
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        shell: bash
+        run: |
+          set -e
+          if [ -z "$BUILD_PROVISION_PROFILE_BASE64" ]; then
+            echo "Manca il secret BUILD_PROVISION_PROFILE_BASE64" >&2
+            exit 1
+          fi
+          PP_PATH="$RUNNER_TEMP/build.mobileprovision"
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
+          security cms -D -i "$PP_PATH" > "$RUNNER_TEMP/profile.plist"
+          PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")
+          PP_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")
+          PP_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
+          PP_BUNDLE_ID="${PP_APP_ID#*.}"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PP_UUID.mobileprovision"
+          echo "PP_UUID=$PP_UUID" >> "$GITHUB_ENV"
+          echo "PP_NAME=$PP_NAME" >> "$GITHUB_ENV"
+          echo "PP_BUNDLE_ID=$PP_BUNDLE_ID" >> "$GITHUB_ENV"
+          echo "Provisioning profile: $PP_NAME ($PP_UUID)"
+          rm -f "$PP_PATH"
+
+      - name: Validate signing identity and profile
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          IOS_BUNDLE_IDENTIFIER: ${{ secrets.IOS_BUNDLE_IDENTIFIER }}
+        run: |
+          set -e
+          security find-identity -v -p codesigning
+          echo "Bundle ID workflow: $IOS_BUNDLE_IDENTIFIER"
+          echo "Bundle ID profile: $PP_BUNDLE_ID"
+          if [ "$IOS_BUNDLE_IDENTIFIER" != "$PP_BUNDLE_ID" ]; then
+            echo "Errore: IOS_BUNDLE_IDENTIFIER non coincide con il provisioning profile." >&2
+            exit 1
+          fi
+
+      - name: Create ExportOptions.plist
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          IOS_BUNDLE_IDENTIFIER: ${{ secrets.IOS_BUNDLE_IDENTIFIER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -e
+          if [ -z "$APPLE_TEAM_ID" ]; then
+            echo "Manca il secret APPLE_TEAM_ID" >&2
+            exit 1
+          fi
+          cat > ios/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>$APPLE_TEAM_ID</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$IOS_BUNDLE_IDENTIFIER</key>
+              <string>$PP_NAME</string>
+            </dict>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+          plutil -lint ios/ExportOptions.plist
+
+      - name: Build signed IPA
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set -e
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: Upload signed IPA as GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Preventivi-iOS-IPA
+          path: ${{ env.APP_DIR }}/build/ios/ipa/*.ipa
+          if-no-files-found: error
+
+      - name: Upload to App Store Connect
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        shell: bash
+        run: |
+          set -e
+          for v in APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_API_KEY_BASE64; do
+            if [ -z "${!v}" ]; then echo "Manca il secret $v" >&2; exit 1; fi
+          done
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          echo -n "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$API_KEY_PATH"
+          IPA_PATH="$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)"
+          test -n "$IPA_PATH"
+          xcrun altool --upload-app --type ios --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --private-key "$API_KEY_PATH"
+          rm -f "$API_KEY_PATH"
+
+      - name: Cleanup signing material
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/app-signing.keychain-db" "$RUNNER_TEMP/profile.plist" "$RUNNER_TEMP/AuthKey_"*.p8 2>/dev/null || true
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
