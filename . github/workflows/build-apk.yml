@@ -1,138 +1,157 @@
-name: Build Preventivi Windows Installer
+name: Build Preventivi APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  build-windows-installer:
-    runs-on: windows-latest
-    env:
-      CMAKE_GENERATOR: Visual Studio 17 2022
-      CMAKE_GENERATOR_PLATFORM: x64
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Flutter 3.47.2
+      - name: Find Flutter project
+        shell: bash
+        run: |
+          set -e
+          if [ -f "pubspec.yaml" ]; then
+            APP_DIR="."
+          else
+            APP_DIR="$(find . -name pubspec.yaml -not -path '*/.dart_tool/*' -print -quit | xargs -r dirname)"
+          fi
+          if [ -z "$APP_DIR" ] || [ ! -f "$APP_DIR/pubspec.yaml" ]; then
+            echo "Errore: pubspec.yaml non trovato" >&2
+            find . -maxdepth 4 -type f | sort | head -200
+            exit 1
+          fi
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          echo "Progetto Flutter: $APP_DIR"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.2'
+          flutter-version: '3.35.3'
           channel: stable
           cache: true
 
-      - name: Find Flutter project
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $pubspec = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Filter pubspec.yaml -Recurse -File |
-            Where-Object { $_.FullName -notmatch '\\build\\' -and $_.FullName -notmatch '\\.dart_tool\\' } |
-            Select-Object -First 1
-          if (-not $pubspec) { throw 'pubspec.yaml non trovato.' }
-          "APP_DIR=$($pubspec.Directory.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Prepare Windows project
-        shell: pwsh
+      - name: Prepare Flutter Android project
         working-directory: ${{ env.APP_DIR }}
+        shell: bash
         run: |
-          $ErrorActionPreference = 'Stop'
-          flutter config --enable-windows-desktop
-          if (-not (Test-Path 'windows\CMakeLists.txt')) {
-            flutter create --platforms=windows --project-name preventivi_app .
-          }
-          if (-not (Test-Path 'windows\CMakeLists.txt')) { throw 'Progetto Windows non generato.' }
+          set -e
+          flutter create --platforms=android --project-name preventivi_app .
+          echo "Contenuto android/app:"
+          find android/app -maxdepth 2 -type f -print | sort
+
+      - name: Configure Android notification permissions
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          if not manifest.exists():
+              raise SystemExit("AndroidManifest.xml non trovato")
+          s = manifest.read_text()
+          permissions = [
+              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
+              '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>',
+          ]
+          for perm in permissions:
+              if perm not in s:
+                  s = s.replace('<manifest ', '<manifest ', 1)
+                  marker = '<application'
+                  s = s.replace(marker, perm + '\n    ' + marker, 1)
+          manifest.write_text(s)
+          print("Permessi notifiche Android configurati.")
+          PY
+
+      - name: Configure Android core library desugaring
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+
+          groovy = Path("android/app/build.gradle")
+          kotlin = Path("android/app/build.gradle.kts")
+          p = groovy if groovy.exists() else kotlin if kotlin.exists() else None
+          if p is None:
+              raise SystemExit("Nessun android/app/build.gradle o build.gradle.kts trovato")
+
+          s = p.read_text()
+
+          if p.name == "build.gradle":
+              if "coreLibraryDesugaringEnabled true" not in s:
+                  if "compileOptions {" in s:
+                      s = s.replace("compileOptions {", "compileOptions {\n        coreLibraryDesugaringEnabled true", 1)
+                  else:
+                      s = s.replace("android {", "android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }", 1)
+              if "sourceCompatibility JavaVersion.VERSION_17" not in s:
+                  s = s.replace("compileOptions {", "compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17", 1)
+              dep = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'"
+              if dep not in s:
+                  if "dependencies {" in s:
+                      s = s.replace("dependencies {", "dependencies {\n    " + dep, 1)
+                  else:
+                      s += "\n\ndependencies {\n    " + dep + "\n}\n"
+          else:
+              if "isCoreLibraryDesugaringEnabled = true" not in s:
+                  if "compileOptions {" in s:
+                      s = s.replace("compileOptions {", "compileOptions {\n        isCoreLibraryDesugaringEnabled = true", 1)
+                  else:
+                      s = s.replace("android {", "android {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }", 1)
+              if "JavaVersion.VERSION_17" not in s:
+                  s = s.replace("compileOptions {", "compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17", 1)
+              dep = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")'
+              if dep not in s:
+                  if "dependencies {" in s:
+                      s = s.replace("dependencies {", "dependencies {\n    " + dep, 1)
+                  else:
+                      s += "\n\ndependencies {\n    " + dep + "\n}\n"
+
+          p.write_text(s)
+          print(f"Configurato: {p}")
+          PY
 
       - name: Install dependencies
-        shell: pwsh
         working-directory: ${{ env.APP_DIR }}
         run: flutter pub get
 
-      - name: Validate Dart project
-        shell: pwsh
+      - name: Generate launcher icons
         working-directory: ${{ env.APP_DIR }}
-        run: flutter analyze --no-fatal-infos
+        run: dart run flutter_launcher_icons
 
-      - name: Build Windows x64 Release
-        shell: pwsh
+      - name: Check project
         working-directory: ${{ env.APP_DIR }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          flutter clean
-          flutter pub get
-          $env:CMAKE_GENERATOR = 'Visual Studio 17 2022'
-          $env:CMAKE_GENERATOR_PLATFORM = 'x64'
-          flutter build windows --release
+          test -f pubspec.yaml
+          test -f lib/main.dart
+          test -d android
+          test -f android/app/build.gradle || test -f android/app/build.gradle.kts
 
-      - name: Verify Windows release
-        shell: pwsh
+      - name: Build release APK
         working-directory: ${{ env.APP_DIR }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $release = Join-Path $env:APP_DIR 'build\windows\x64\runner\Release'
-          if (-not (Test-Path $release)) { throw "Release non trovata: $release" }
-          $exe = Join-Path $release 'preventivi_app.exe'
-          if (-not (Test-Path $exe)) {
-            $exe = Get-ChildItem -Path $release -Filter '*.exe' -File | Select-Object -First 1
-          }
-          if (-not $exe) { throw 'Nessun EXE Windows trovato.' }
-          Write-Host "EXE: $($exe.FullName)"
-          "WINDOWS_RELEASE_DIR=$release" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        run: flutter build apk --release
 
-      - name: Read application version
-        shell: pwsh
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $line = Select-String -Path 'pubspec.yaml' -Pattern '^version:\s*([^\s]+)' | Select-Object -First 1
-          $version = if ($line) { $line.Matches.Groups[1].Value.Split('+')[0] } else { '1.0.0' }
-          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { $version = '1.0.0' }
-          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Versione: $version"
-
-      - name: Install Inno Setup
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          choco install innosetup --yes --no-progress
-          $iscc = Get-ChildItem 'C:\Program Files (x86)\Inno Setup*\ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $iscc) { throw 'ISCC.exe non trovato.' }
-          "ISCC=$($iscc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Build professional installer
-        shell: pwsh
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $iss = Join-Path $env:GITHUB_WORKSPACE 'installer\Preventivi.iss'
-          if (-not (Test-Path $iss)) { throw "Script Inno Setup non trovato: $iss" }
-          New-Item -ItemType Directory -Force -Path (Join-Path $env:GITHUB_WORKSPACE 'dist') | Out-Null
-          & $env:ISCC /DReleaseDir="$env:WINDOWS_RELEASE_DIR" /DMyAppVersion="$env:APP_VERSION" $iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup ha restituito codice $LASTEXITCODE" }
-
-      - name: Create clean portable ZIP
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $zip = Join-Path $env:GITHUB_WORKSPACE 'dist\Preventivi-Windows-Portable.zip'
-          Compress-Archive -Path "$env:WINDOWS_RELEASE_DIR\*" -DestinationPath $zip -CompressionLevel Optimal -Force
-
-      - name: Upload installer
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Preventivi-Windows-Installer
-          path: dist/Preventivi-Setup.exe
+          name: Preventivi-APK
+          path: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload portable package
-        uses: actions/upload-artifact@v4
-        with:
-          name: Preventivi-Windows-Portable
-          path: dist/Preventivi-Windows-Portable.zip
-          if-no-files-found: error
-          retention-days: 30
