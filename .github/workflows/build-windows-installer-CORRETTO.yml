@@ -1,0 +1,245 @@
+name: Build Preventivi Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Gestione Preventivi Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter config --enable-windows-desktop
+
+      - name: Generate Windows platform
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if (!(Test-Path "pubspec.yaml")) {
+            throw "pubspec.yaml non trovato."
+          }
+
+          flutter create `
+            --platforms=windows `
+            --project-name preventivi_app `
+            --org com.preventivi `
+            .
+
+          if (!(Test-Path "windows/runner")) {
+            throw "La piattaforma Windows non è stata generata correttamente."
+          }
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter pub get
+
+      - name: Configure Windows application icon
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $source = "assets/app_icon.ico"
+          $destination = "windows/runner/resources/app_icon.ico"
+
+          if (!(Test-Path $source)) {
+            Write-Warning "Icona $source non trovata. Verrà usata l'icona Flutter predefinita."
+            exit 0
+          }
+
+          if (!(Test-Path "windows/runner/resources")) {
+            New-Item -ItemType Directory -Path "windows/runner/resources" -Force | Out-Null
+          }
+
+          Copy-Item -Path $source -Destination $destination -Force
+          Write-Host "Icona Windows copiata."
+
+      - name: Update Windows runner icon
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $rcFile = "windows/runner/Runner.rc"
+
+          if (!(Test-Path $rcFile)) {
+            throw "Runner.rc non trovato."
+          }
+
+          $content = Get-Content $rcFile -Raw
+
+          $content = $content -replace `
+            'IDI_ICON1\s+ICON\s+DISCARDABLE\s+"resources\\app_icon\.ico"', `
+            'IDI_ICON1 ICON DISCARDABLE "resources\app_icon.ico"'
+
+          Set-Content -Path $rcFile -Value $content -Encoding UTF8
+          Write-Host "Configurazione icona Windows completata."
+
+      - name: Analyze Flutter project
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Rimuove il test di esempio generato da Flutter:
+          # questo progetto non utilizza necessariamente una classe MyApp.
+          if (Test-Path "test/widget_test.dart") {
+            Remove-Item "test/widget_test.dart" -Force
+            Write-Host "Test widget predefinito rimosso."
+          }
+
+          flutter analyze --no-fatal-infos
+
+      - name: Build Windows release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter build windows --release
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Build Windows fallita."
+          }
+
+      - name: Verify Windows executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $release = "build/windows/x64/runner/Release"
+          $exe = "$release/preventivi_app.exe"
+
+          if (!(Test-Path $exe)) {
+            Write-Host "Contenuto della cartella Release:"
+            Get-ChildItem $release -Recurse | Select-Object FullName, Length
+            throw "preventivi_app.exe non trovato."
+          }
+
+          Write-Host "BUILD WINDOWS COMPLETATA"
+          Write-Host "EXE: $exe"
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $release = "build/windows/x64/runner/Release"
+
+          Compress-Archive `
+            -Path "$release/*" `
+            -DestinationPath "Preventivi-Windows-Portable.zip" `
+            -Force
+
+          if (!(Test-Path "Preventivi-Windows-Portable.zip")) {
+            throw "ZIP Windows non creato."
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup --no-progress -y
+
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+          if (!(Test-Path $iscc)) {
+            throw "Inno Setup non trovato."
+          }
+
+      - name: Create installer script
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          @'
+          #define MyAppName "Gestione Preventivi"
+          #define MyAppVersion "1.0.0"
+          #define MyAppPublisher "Gestione Preventivi"
+          #define MyAppExeName "preventivi_app.exe"
+
+          [Setup]
+          AppId={{B5D5A9D2-8D8E-4E8B-9B1C-7D2C6F1D3A11}
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          AppPublisher={#MyAppPublisher}
+          DefaultDirName={autopf}\Gestione Preventivi
+          DefaultGroupName=Gestione Preventivi
+          OutputDir=installer
+          OutputBaseFilename=Gestione-Preventivi-Setup
+          Compression=lzma
+          SolidCompression=yes
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          UninstallDisplayIcon={app}\{#MyAppExeName}
+          SetupIconFile=assets\app_icon.ico
+          PrivilegesRequired=admin
+          WizardStyle=modern
+
+          [Languages]
+          Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
+
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"
+          DestDir: "{app}"
+          Flags: recursesubdirs ignoreversion
+
+          [Icons]
+          Name: "{group}\Gestione Preventivi"
+          Filename: "{app}\{#MyAppExeName}"
+          Name: "{commondesktop}\Gestione Preventivi"
+          Filename: "{app}\{#MyAppExeName}"
+
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"
+          Description: "Avvia Gestione Preventivi"
+          Flags: nowait postinstall skipifsilent
+          '@ | Set-Content -Path "installer.iss" -Encoding UTF8
+
+      - name: Compile Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+          if (!(Test-Path $iscc)) {
+            throw "ISCC.exe non trovato."
+          }
+
+          & $iscc "installer.iss"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Compilazione installer fallita."
+          }
+
+          if (!(Test-Path "installer/Gestione-Preventivi-Setup.exe")) {
+            throw "Installer EXE non creato."
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestione-Preventivi-Windows
+          path: |
+            Preventivi-Windows-Portable.zip
+            installer/Gestione-Preventivi-Setup.exe
+          if-no-files-found: error
