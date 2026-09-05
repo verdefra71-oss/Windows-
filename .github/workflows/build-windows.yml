@@ -1,0 +1,54 @@
+name: Build Preventivi Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+
+      - name: Prepare Flutter Windows project
+        shell: pwsh
+        run: |
+          flutter create --platforms=windows --project-name preventivi_app .
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate application icon
+        run: dart run flutter_launcher_icons
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Create distributable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "Gestione-Preventivi-Il-Tornitore-Windows.zip" -Force
+
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestione-Preventivi-Il-Tornitore-Windows
+          path: Gestione-Preventivi-Il-Tornitore-Windows.zip
+          if-no-files-found: error
