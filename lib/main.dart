@@ -847,30 +847,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onRefresh: caricaStatistiche,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
           children: [
             _heroCard(),
-            const SizedBox(height: 18),
-            const Text('Gestione', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Color(0xFF3B2F0B))),
             const SizedBox(height: 10),
-            _menuTile(Icons.receipt_long_rounded, 'Lista preventivi', 'Visualizza e modifica i preventivi salvati', () => apri(const ListaPreventiviScreen())),
-            _menuTile(Icons.people_alt_rounded, 'Clienti', 'Gestisci l’anagrafica clienti', () => apri(const ClientiScreen())),
-            _menuTile(Icons.inventory_2_rounded, 'Prodotti / Servizi', 'Gestisci prodotti e prezzi', () => apri(const ProdottiScreen())),
-            _menuTile(Icons.payments_rounded, 'Rate e scadenze', 'Controlla le rate programmate', () => apri(const RateScreen())),
-            _menuTile(Icons.backup_rounded, 'Backup e dati', 'Esporta, importa e gestisci il backup', () => apri(const BackupScreen())),
-            _menuTile(Icons.notifications_active_rounded, 'Notifiche', 'Abilita gli avvisi delle scadenze', () => apri(const NotificheScreen())),
-            const SizedBox(height: 18),
-            const Text('Riepilogo', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: Color(0xFF5C4A12))),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: _statCard(Icons.receipt_long_rounded, 'Preventivi', preventivi)),
-              const SizedBox(width: 10),
-              Expanded(child: _statCard(Icons.people_alt_rounded, 'Clienti', clienti)),
+            const Text('Gestione', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF3B2F0B))),
+            const SizedBox(height: 7),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: _menuTile(Icons.receipt_long_rounded, 'Lista preventivi', 'Visualizza e modifica', () => apri(const ListaPreventiviScreen()))),
+              const SizedBox(width: 8),
+              Expanded(child: _menuTile(Icons.people_alt_rounded, 'Clienti', 'Gestisci anagrafica', () => apri(const ClientiScreen()))),
+            ]),
+            const SizedBox(height: 7),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: _menuTile(Icons.inventory_2_rounded, 'Prodotti / Servizi', 'Gestisci prodotti e prezzi', () => apri(const ProdottiScreen()))),
+              const SizedBox(width: 8),
+              Expanded(child: _menuTile(Icons.payments_rounded, 'Rate e scadenze', 'Controlla le rate', () => apri(const RateScreen()))),
+            ]),
+            const SizedBox(height: 7),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: _menuTile(Icons.backup_rounded, 'Backup e dati', 'Esporta e importa', () => apri(const BackupScreen()))),
+              const SizedBox(width: 8),
+              Expanded(child: _menuTile(Icons.notifications_active_rounded, 'Notifiche', 'Avvisi delle scadenze', () => apri(const NotificheScreen()))),
             ]),
             const SizedBox(height: 10),
+            const Text('Riepilogo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF5C4A12))),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: _statCard(Icons.receipt_long_rounded, 'Preventivi', preventivi)),
+              const SizedBox(width: 8),
+              Expanded(child: _statCard(Icons.people_alt_rounded, 'Clienti', clienti)),
+            ]),
+            const SizedBox(height: 6),
             Row(children: [
               Expanded(child: _statCard(Icons.inventory_2_rounded, 'Prodotti', prodotti)),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(child: _statCard(Icons.payments_rounded, 'Rate', rate)),
             ]),
           ],
@@ -936,16 +947,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         elevation: 1, color: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 7),
           child: Column(children: [
             Container(
               width: 44, height: 44,
               decoration: BoxDecoration(color: const Color(0xFFFFF1BD), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, color: const Color(0xFF8A6A00)),
+              child: Icon(icon, size: 28, color: const Color(0xFF8A6A00)),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(loading ? '…' : '$value',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF29230F))),
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Color(0xFF29230F))),
             Text(label, style: const TextStyle(color: Color(0xFF6B6450))),
           ]),
         ),
@@ -955,17 +966,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _menuTile(IconData icon, String title, String subtitle, VoidCallback onTap) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 9), elevation: 1, color: Colors.white,
+      margin: EdgeInsets.zero, elevation: 1, color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16), onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
+          padding: const EdgeInsets.symmetric(vertical: 1),
           child: ListTile(
             leading: Container(
-              width: 46, height: 46,
+              width: 48, height: 48,
               decoration: BoxDecoration(color: const Color(0xFFFFF1BD), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, color: const Color(0xFF8A6A00)),
+              child: Icon(icon, size: 28, color: const Color(0xFF8A6A00)),
             ),
             title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(subtitle),
