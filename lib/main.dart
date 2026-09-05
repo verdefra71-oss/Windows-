@@ -37,14 +37,14 @@ class PreventiviApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFF2C94C),
+          seedColor: const Color(0xFFD4AF37),
           brightness: Brightness.light,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFFFBF0),
+        scaffoldBackgroundColor: const Color(0xFFFFF8E1),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF2C94C),
-          foregroundColor: Color(0xFF2B240D),
+          backgroundColor: Color(0xFFD4AF37),
+          foregroundColor: Color(0xFF3B2F0B),
           elevation: 0,
           centerTitle: true,
         ),
@@ -851,7 +851,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             _heroCard(),
             const SizedBox(height: 18),
-            const Text('Riepilogo', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: Color(0xFF332B14))),
+            const Text('Gestione', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Color(0xFF3B2F0B))),
+            const SizedBox(height: 10),
+            _menuTile(Icons.receipt_long_rounded, 'Lista preventivi', 'Visualizza e modifica i preventivi salvati', () => apri(const ListaPreventiviScreen())),
+            _menuTile(Icons.people_alt_rounded, 'Clienti', 'Gestisci l’anagrafica clienti', () => apri(const ClientiScreen())),
+            _menuTile(Icons.inventory_2_rounded, 'Prodotti / Servizi', 'Gestisci prodotti e prezzi', () => apri(const ProdottiScreen())),
+            _menuTile(Icons.payments_rounded, 'Rate e scadenze', 'Controlla le rate programmate', () => apri(const RateScreen())),
+            _menuTile(Icons.backup_rounded, 'Backup e dati', 'Esporta, importa e gestisci il backup', () => apri(const BackupScreen())),
+            _menuTile(Icons.notifications_active_rounded, 'Notifiche', 'Abilita gli avvisi delle scadenze', () => apri(const NotificheScreen())),
+            const SizedBox(height: 18),
+            const Text('Riepilogo', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: Color(0xFF5C4A12))),
             const SizedBox(height: 10),
             Row(children: [
               Expanded(child: _statCard(Icons.receipt_long_rounded, 'Preventivi', preventivi)),
@@ -864,15 +873,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 10),
               Expanded(child: _statCard(Icons.payments_rounded, 'Rate', rate)),
             ]),
-            const SizedBox(height: 22),
-            const Text('Gestione', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: Color(0xFF332B14))),
-            const SizedBox(height: 10),
-            _menuTile(Icons.receipt_long_rounded, 'Lista preventivi', 'Visualizza e modifica i preventivi salvati', () => apri(const ListaPreventiviScreen())),
-            _menuTile(Icons.people_alt_rounded, 'Clienti', 'Gestisci l’anagrafica clienti', () => apri(const ClientiScreen())),
-            _menuTile(Icons.inventory_2_rounded, 'Prodotti / Servizi', 'Gestisci prodotti e prezzi', () => apri(const ProdottiScreen())),
-            _menuTile(Icons.payments_rounded, 'Rate e scadenze', 'Controlla le rate programmate', () => apri(const RateScreen())),
-            _menuTile(Icons.backup_rounded, 'Backup e dati', 'Esporta, importa e gestisci il backup', () => apri(const BackupScreen())),
-            _menuTile(Icons.notifications_active_rounded, 'Notifiche', 'Abilita gli avvisi delle scadenze', () => apri(const NotificheScreen())),
           ],
         ),
       ),
@@ -889,7 +889,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xFFFFD95A), Color(0xFFF2C94C)],
+            colors: [Color(0xFFE8C65A), Color(0xFFD4AF37), Color(0xFFB8860B)],
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [BoxShadow(blurRadius: 18, offset: Offset(0, 8), color: Color(0x22000000))],
@@ -913,7 +913,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             width: double.infinity, height: 50,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF2B240D), foregroundColor: Colors.white,
+                backgroundColor: const Color(0xFF3B2F0B), foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               ),
               onPressed: () => apri(const NuovoPreventivoScreen()),
