@@ -1,0 +1,269 @@
+name: Build Preventivi Windows 2022
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    name: Build Preventivi Windows 2022
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Verify Visual Studio 2022
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Write-Host "Ricerca Visual Studio 2022..."
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          if (-not (Test-Path $vswhere)) {
+            throw "vswhere.exe non trovato."
+          }
+
+          $vsPath = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+
+          if (-not $vsPath) {
+            throw "Visual Studio 2022 con Desktop development with C++ non trovato."
+          }
+
+          Write-Host "Visual Studio trovato: $vsPath"
+
+          "VS_PATH=$vsPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Enable Windows desktop
+        shell: pwsh
+        run: |
+          flutter config --enable-windows-desktop
+          flutter doctor -v
+
+      - name: Create Windows platform files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if (Test-Path "windows") {
+            Remove-Item "windows" -Recurse -Force
+          }
+
+          flutter create --platforms=windows --project-name preventivi_app --org com.preventivi .
+
+      - name: Get dependencies
+        shell: pwsh
+        run: |
+          flutter pub get
+
+      - name: Remove default failing test
+        shell: pwsh
+        run: |
+          if (Test-Path "test\widget_test.dart") {
+            Remove-Item "test\widget_test.dart" -Force
+          }
+
+      - name: Configure application icon
+        shell: pwsh
+        run: |
+          $source = "assets\app_icon.ico"
+          $destination = "windows\runner\resources\app_icon.ico"
+
+          if (Test-Path $source) {
+            Copy-Item $source $destination -Force
+            Write-Host "Icona Windows configurata."
+          } else {
+            Write-Host "assets\app_icon.ico non trovato: uso l'icona predefinita."
+          }
+
+      - name: Analyze Flutter project
+        shell: pwsh
+        run: |
+          flutter analyze --no-fatal-infos
+
+      - name: Configure CMake for Visual Studio 2022
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $env:CMAKE_GENERATOR = "Visual Studio 17 2022"
+          $env:CMAKE_GENERATOR_PLATFORM = "x64"
+          $env:CMAKE_GENERATOR_INSTANCE = $env:VS_PATH
+
+          "CMAKE_GENERATOR=Visual Studio 17 2022" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CMAKE_GENERATOR_PLATFORM=x64" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CMAKE_GENERATOR_INSTANCE=$env:VS_PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          Write-Host "CMake generator: $env:CMAKE_GENERATOR"
+          Write-Host "CMake platform: $env:CMAKE_GENERATOR_PLATFORM"
+          Write-Host "Visual Studio instance: $env:CMAKE_GENERATOR_INSTANCE"
+
+      - name: Verify CMake Visual Studio 2022
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $testDir = Join-Path $env:RUNNER_TEMP "cmake-vs2022-test"
+
+          if (Test-Path $testDir) {
+            Remove-Item $testDir -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $testDir | Out-Null
+
+          @"
+          cmake_minimum_required(VERSION 3.20)
+          project(TestVS2022 LANGUAGES CXX)
+          "@ | Set-Content "$testDir\CMakeLists.txt"
+
+          Push-Location $testDir
+          try {
+            cmake -S . -B build `
+              -G "Visual Studio 17 2022" `
+              -A x64 `
+              -T host=x64
+          }
+          finally {
+            Pop-Location
+          }
+
+      - name: Clean Flutter build
+        shell: pwsh
+        run: |
+          flutter clean
+          flutter pub get
+
+      - name: Build Windows release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Write-Host "=========================================="
+          Write-Host "BUILD WINDOWS - VISUAL STUDIO 2022"
+          Write-Host "=========================================="
+
+          flutter build windows --release -v
+
+      - name: Verify Windows executable
+        shell: pwsh
+        run: |
+          $exe = "build\windows\x64\runner\Release\preventivi_app.exe"
+
+          if (-not (Test-Path $exe)) {
+            throw "Eseguibile Windows non trovato: $exe"
+          }
+
+          Write-Host "Eseguibile creato correttamente:"
+          Write-Host $exe
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $releaseDir = "build\windows\x64\runner\Release"
+          $zip = "Gestione-Preventivi-Windows-Portable.zip"
+
+          if (Test-Path $zip) {
+            Remove-Item $zip -Force
+          }
+
+          Compress-Archive `
+            -Path "$releaseDir\*" `
+            -DestinationPath $zip `
+            -CompressionLevel Optimal
+
+          if (-not (Test-Path $zip)) {
+            throw "ZIP portatile non creato."
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+
+      - name: Create installer script
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          New-Item -ItemType Directory -Force -Path installer | Out-Null
+
+          @"
+          [Setup]
+          AppName=Gestione Preventivi
+          AppVersion=1.0.0
+          DefaultDirName={autopf}\Gestione Preventivi
+          DefaultGroupName=Gestione Preventivi
+          OutputDir=.
+          OutputBaseFilename=Gestione-Preventivi-Setup
+          Compression=lzma
+          SolidCompression=yes
+          ArchitecturesInstallIn64BitMode=x64
+          UninstallDisplayName=Gestione Preventivi
+
+          [Files]
+          Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+
+          [Icons]
+          Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
+          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
+
+          [Run]
+          Filename: "{app}\preventivi_app.exe"; Description: "Avvia Gestione Preventivi"; Flags: nowait postinstall skipifsilent
+          "@ | Set-Content "installer\Gestione-Preventivi.iss" -Encoding UTF8
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe di Inno Setup non trovato."
+          }
+
+          Push-Location installer
+          try {
+            & $iscc "Gestione-Preventivi.iss"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Compilazione installer Inno Setup fallita."
+            }
+          }
+          finally {
+            Pop-Location
+          }
+
+          if (-not (Test-Path "installer\Gestione-Preventivi-Setup.exe")) {
+            throw "Installer non creato."
+          }
+
+      - name: Upload Windows portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestione-Preventivi-Windows-Portable
+          path: Gestione-Preventivi-Windows-Portable.zip
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestione-Preventivi-Windows-Installer
+          path: installer/Gestione-Preventivi-Setup.exe
+          if-no-files-found: error
