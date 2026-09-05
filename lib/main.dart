@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -18,10 +19,6 @@ import 'package:share_plus/share_plus.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isWindows || Platform.isLinux) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
   await NotificationService().init();
   await DatabaseHelper.instance.createAutomaticBackup();
   runApp(const PreventiviApp());
@@ -65,7 +62,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 6,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -75,8 +72,7 @@ CREATE TABLE clienti (
   telefono TEXT,
   indirizzo TEXT,
   partita_iva TEXT,
-  codice_fiscale TEXT,
-  parrocchia TEXT
+  codice_fiscale TEXT
 )
 ''');
 
@@ -97,8 +93,7 @@ CREATE TABLE preventivi (
   totale REAL NOT NULL,
   numero_rate INTEGER NOT NULL,
   articoli TEXT NOT NULL DEFAULT '[]',
-  iva_percent REAL NOT NULL DEFAULT 0,
-  accettato INTEGER NOT NULL DEFAULT 0
+  iva_percent REAL NOT NULL DEFAULT 0
 )
 ''');
 
@@ -130,16 +125,6 @@ CREATE TABLE rate (
           );
           await db.execute(
             "ALTER TABLE clienti ADD COLUMN codice_fiscale TEXT",
-          );
-        }
-        if (oldVersion < 5) {
-          await db.execute(
-            "ALTER TABLE clienti ADD COLUMN parrocchia TEXT",
-          );
-        }
-        if (oldVersion < 6) {
-          await db.execute(
-            "ALTER TABLE preventivi ADD COLUMN accettato INTEGER NOT NULL DEFAULT 0",
           );
         }
       },
@@ -206,7 +191,6 @@ CREATE TABLE rate (
     String indirizzo = '',
     String partitaIva = '',
     String codiceFiscale = '',
-    String parrocchia = '',
   }) async {
     final id = await (await database).insert('clienti', {
       'nome': nome,
@@ -215,7 +199,6 @@ CREATE TABLE rate (
       'indirizzo': indirizzo,
       'partita_iva': partitaIva,
       'codice_fiscale': codiceFiscale,
-      'parrocchia': parrocchia,
     });
     await autoBackup();
     return id;
@@ -229,7 +212,6 @@ CREATE TABLE rate (
     String indirizzo = '',
     String partitaIva = '',
     String codiceFiscale = '',
-    String parrocchia = '',
   }) async {
     final result = await (await database).update(
       'clienti',
@@ -240,7 +222,6 @@ CREATE TABLE rate (
         'indirizzo': indirizzo,
         'partita_iva': partitaIva,
         'codice_fiscale': codiceFiscale,
-        'parrocchia': parrocchia,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -273,7 +254,6 @@ CREATE TABLE rate (
     required int numeroRate,
     required List<Map<String, dynamic>> articoli,
     required double ivaPercent,
-    required bool accettato,
   }) async {
     final id = await (await database).insert('preventivi', {
       'numero': numero,
@@ -283,7 +263,6 @@ CREATE TABLE rate (
       'numero_rate': numeroRate,
       'articoli': jsonEncode(articoli),
       'iva_percent': ivaPercent,
-      'accettato': accettato ? 1 : 0,
     });
     await autoBackup();
     return id;
@@ -296,7 +275,6 @@ CREATE TABLE rate (
     required int numeroRate,
     required List<Map<String, dynamic>> articoli,
     required double ivaPercent,
-    required bool accettato,
   }) async {
     final result = await (await database).update(
       'preventivi',
@@ -306,7 +284,6 @@ CREATE TABLE rate (
         'numero_rate': numeroRate,
         'articoli': jsonEncode(articoli),
         'iva_percent': ivaPercent,
-        'accettato': accettato ? 1 : 0,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -421,7 +398,6 @@ class NotificationService {
   }
 
   Future<bool> richiediPermessi() async {
-    if (!Platform.isAndroid) return false;
     final android = await _android();
     if (android == null) return false;
 
@@ -431,14 +407,12 @@ class NotificationService {
   }
 
   Future<bool> notificheAbilitate() async {
-    if (!Platform.isAndroid) return false;
     final android = await _android();
     if (android == null) return false;
     return await android.areNotificationsEnabled() ?? false;
   }
 
   Future<void> init() async {
-    if (!Platform.isAndroid) return;
     tz_data.initializeTimeZones();
     try {
       tz.setLocalLocation(tz.getLocation('Europe/Rome'));
@@ -458,7 +432,6 @@ class NotificationService {
     required double importo,
     required DateTime dataScadenza,
   }) async {
-    if (!Platform.isAndroid) return false;
     final when = tz.TZDateTime.from(dataScadenza, tz.local);
 
     if (when.isBefore(tz.TZDateTime.now(tz.local))) return false;
@@ -520,18 +493,21 @@ class PdfGenerator {
     required List<Map<String, dynamic>> articoli,
     required int numeroRate,
     required double ivaPercent,
-    required bool accettato,
   }) async {
-    // Il font predefinito del pacchetto PDF non contiene il carattere euro (€).
-    // Carichiamo quindi un font Unicode con supporto completo al simbolo €.
+    final pdf = pw.Document();
+
+    // Font TrueType con supporto completo del simbolo €.
+    // I font PDF standard possono non rendere correttamente il carattere Euro
+    // in alcuni visualizzatori PDF.
     final fontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
     final boldFontData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
-    final pdf = pw.Document(
-      theme: pw.ThemeData.withFont(
-        base: pw.Font.ttf(fontData),
-        bold: pw.Font.ttf(boldFontData),
-      ),
+    final pdfFont = pw.Font.ttf(fontData);
+    final pdfBoldFont = pw.Font.ttf(boldFontData);
+    final pdfTheme = pw.ThemeData.withFont(
+      base: pdfFont,
+      bold: pdfBoldFont,
     );
+
     pw.MemoryImage? logo;
     Map<String, dynamic>? datiCliente;
 
@@ -574,7 +550,6 @@ class PdfGenerator {
     final email = value('email');
     final partitaIva = value('partita_iva');
     final codiceFiscale = value('codice_fiscale');
-    final parrocchia = value('parrocchia');
 
     final clientRows = <pw.Widget>[
       pw.Text(
@@ -595,11 +570,11 @@ class PdfGenerator {
       if (email.isNotEmpty) pw.Text('Email: $email'),
       if (partitaIva.isNotEmpty) pw.Text('Partita IVA: $partitaIva'),
       if (codiceFiscale.isNotEmpty) pw.Text('Codice Fiscale: $codiceFiscale'),
-      if (parrocchia.isNotEmpty) pw.Text('Parrocchia: $parrocchia'),
     ];
 
     pdf.addPage(
       pw.MultiPage(
+        theme: pdfTheme,
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(30, 28, 30, 28),
         build: (_) => [
@@ -631,7 +606,7 @@ class PdfGenerator {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(
-                      accettato ? 'RICEVUTA' : 'PREVENTIVO',
+                      'PREVENTIVO',
                       style: pw.TextStyle(
                         fontSize: 22,
                         fontWeight: pw.FontWeight.bold,
@@ -760,7 +735,7 @@ class PdfGenerator {
 
     await Printing.sharePdf(
       bytes: await pdf.save(),
-      filename: '${accettato ? 'Ricevuta' : 'Preventivo'}_$numero.pdf',
+      filename: 'Preventivo_$numero.pdf',
     );
   }
 }
@@ -1036,8 +1011,7 @@ Future<String?> selezionaCliente(BuildContext context) async {
             final nome = (c['nome'] ?? '').toString().toLowerCase();
             final piva = (c['partita_iva'] ?? '').toString().toLowerCase();
             final cf = (c['codice_fiscale'] ?? '').toString().toLowerCase();
-            final parrocchia = (c['parrocchia'] ?? '').toString().toLowerCase();
-            return nome.contains(q) || piva.contains(q) || cf.contains(q) || parrocchia.contains(q);
+            return nome.contains(q) || piva.contains(q) || cf.contains(q);
           }).toList();
           return AlertDialog(
             title: const Text('Seleziona cliente'),
@@ -1074,7 +1048,6 @@ Future<String?> selezionaCliente(BuildContext context) async {
                                 [
                                   filtrati[i]['telefono'],
                                   filtrati[i]['email'],
-                                  if ((filtrati[i]['parrocchia'] ?? '').toString().isNotEmpty) 'Parrocchia: ${filtrati[i]['parrocchia']}',
                                 ]
                                     .where((x) => (x ?? '').toString().isNotEmpty)
                                     .join(' • '),
@@ -1190,7 +1163,6 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
 
   int numeroRate = 1;
   double ivaPercent = 22;
-  bool accettato = false;
   bool busy = false;
 
   double get imponibile => articoli.fold<double>(
@@ -1287,7 +1259,6 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         numeroRate: numeroRate,
         articoli: articoli,
         ivaPercent: ivaPercent,
-        accettato: accettato,
       );
 
       final clienti = await db.getClienti();
@@ -1340,7 +1311,6 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         articoli: articoli,
         numeroRate: numeroRate,
         ivaPercent: ivaPercent,
-        accettato: accettato,
       );
 
       final notificheOk = await NotificationService().notificheAbilitate();
@@ -1597,22 +1567,6 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
                   ),
                 ),
               ),
-            const SizedBox(height: 12),
-            Card(
-              child: CheckboxListTile(
-                value: accettato,
-                onChanged: (v) => setState(() => accettato = v ?? false),
-                title: const Text(
-                  'Preventivo accettato dal cliente',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: const Text(
-                  'Se selezionato, il PDF verrà generato con la dicitura RICEVUTA.',
-                ),
-                secondary: const Icon(Icons.check_circle_outline),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -1778,11 +1732,6 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
                 '${x['numero_rate']} '
                 '${x['numero_rate'] == 1 ? 'rata' : 'rate'}',
               ),
-              _detailRow(
-                Icons.check_circle_outline,
-                'Stato',
-                (x['accettato'] as num?)?.toInt() == 1 ? 'ACCETTATO / RICEVUTA' : 'IN ATTESA',
-              ),
               const SizedBox(height: 18),
               Row(
                 children: [
@@ -1828,7 +1777,6 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
                       articoli: _articoliDaPreventivo(x),
                       numeroRate: x['numero_rate'],
                       ivaPercent: (x['iva_percent'] as num?)?.toDouble() ?? 0,
-                      accettato: (x['accettato'] as num?)?.toInt() == 1,
                     );
                   },
                   icon: const Icon(Icons.picture_as_pdf),
@@ -2048,7 +1996,6 @@ class _ModificaPreventivoScreenState
   late List<Map<String, dynamic>> articoli;
   late int numeroRate;
   late double ivaPercent;
-  late bool accettato;
 
   bool busy = false;
 
@@ -2096,7 +2043,6 @@ class _ModificaPreventivoScreenState
         (widget.preventivo['numero_rate'] as num).toInt();
     ivaPercent =
         (widget.preventivo['iva_percent'] as num?)?.toDouble() ?? 0;
-    accettato = (widget.preventivo['accettato'] as num?)?.toInt() == 1;
 
     try {
       final raw = jsonDecode(
@@ -2177,7 +2123,6 @@ class _ModificaPreventivoScreenState
         numeroRate: numeroRate,
         articoli: articoli,
         ivaPercent: ivaPercent,
-        accettato: accettato,
       );
 
       final database = await db.database;
@@ -2228,7 +2173,6 @@ class _ModificaPreventivoScreenState
         articoli: articoli,
         numeroRate: numeroRate,
         ivaPercent: ivaPercent,
-        accettato: accettato,
       );
 
       final notificheOk = await NotificationService().notificheAbilitate();
@@ -2481,22 +2425,6 @@ class _ModificaPreventivoScreenState
                   ),
                 ),
               ),
-            const SizedBox(height: 12),
-            Card(
-              child: CheckboxListTile(
-                value: accettato,
-                onChanged: (v) => setState(() => accettato = v ?? false),
-                title: const Text(
-                  'Preventivo accettato dal cliente',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: const Text(
-                  'Se selezionato, il PDF verrà generato con la dicitura RICEVUTA.',
-                ),
-                secondary: const Icon(Icons.check_circle_outline),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -2572,8 +2500,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['partita_iva'] ?? '');
     final codiceFiscale =
         TextEditingController(text: cliente?['codice_fiscale'] ?? '');
-    final parrocchia =
-        TextEditingController(text: cliente?['parrocchia'] ?? '');
     final key = GlobalKey<FormState>();
 
     await showModalBottomSheet(
@@ -2611,15 +2537,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   validator: (v) => v == null || v.trim().isEmpty
                       ? 'Inserisci il nome'
                       : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: parrocchia,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Parrocchia',
-                    prefixIcon: Icon(Icons.church_outlined),
-                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -2682,7 +2599,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           indirizzo: indirizzo.text.trim(),
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
-                          parrocchia: parrocchia.text.trim(),
                         );
                       } else {
                         await DatabaseHelper.instance.updateCliente(
@@ -2693,7 +2609,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           indirizzo: indirizzo.text.trim(),
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
-                          parrocchia: parrocchia.text.trim(),
                         );
                       }
 
@@ -2721,7 +2636,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
     indirizzo.dispose();
     partitaIva.dispose();
     codiceFiscale.dispose();
-    parrocchia.dispose();
+    email.dispose();
+    indirizzo.dispose();
   }
 
   Future<void> _elimina(Map<String, dynamic> c) async {
@@ -2754,7 +2670,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final q = _search.text.trim().toLowerCase();
 
     final filtrati = clienti.where((c) {
-      return '${c['nome']} ${c['telefono']} ${c['email']} ${c['parrocchia'] ?? ''}'
+      return '${c['nome']} ${c['telefono']} ${c['email']}'
           .toLowerCase()
           .contains(q);
     }).toList();
@@ -2823,8 +2739,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                         c['email'],
                       if ((c['indirizzo'] ?? '').toString().isNotEmpty)
                         c['indirizzo'],
-                      if ((c['parrocchia'] ?? '').toString().isNotEmpty)
-                        'Parrocchia: ${c['parrocchia']}',
                     ].join('\n');
 
                     return Card(
