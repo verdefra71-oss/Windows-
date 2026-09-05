@@ -259,7 +259,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $release = (Resolve-Path "build/windows/x64/runner/Release").Path
-          $issPath = Join-Path $PWD "build/Preventivi.iss"
+          $issPath = Join-Path $PWD "Preventivi.iss"
 
           $iss = @"
           #define MyAppName "Gestione Preventivi"
@@ -314,7 +314,7 @@ jobs:
           }
 
           $iscc = $env:ISCC_PATH
-          $iss = Join-Path $PWD "build/Preventivi.iss"
+          $iss = Join-Path $PWD "Preventivi.iss"
 
           if (-not (Test-Path $iscc)) {
             throw "ISCC.exe non trovato: $iscc"
