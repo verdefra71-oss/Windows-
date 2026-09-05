@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -19,6 +20,11 @@ import 'package:share_plus/share_plus.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // sqflite usa SQLite nativo su Android/iOS; su Windows utilizziamo FFI.
+  if (Platform.isWindows) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   await NotificationService().init();
   await DatabaseHelper.instance.createAutomaticBackup();
   runApp(const PreventiviApp());
@@ -398,6 +404,7 @@ class NotificationService {
   }
 
   Future<bool> richiediPermessi() async {
+    if (Platform.isWindows) return false;
     final android = await _android();
     if (android == null) return false;
 
@@ -407,12 +414,17 @@ class NotificationService {
   }
 
   Future<bool> notificheAbilitate() async {
+    if (Platform.isWindows) return false;
     final android = await _android();
     if (android == null) return false;
     return await android.areNotificationsEnabled() ?? false;
   }
 
   Future<void> init() async {
+    // Le notifiche locali attualmente utilizzate dall'app sono Android-specifiche.
+    // Su Windows l'app continua a funzionare normalmente senza inizializzare il plugin.
+    if (Platform.isWindows) return;
+
     tz_data.initializeTimeZones();
     try {
       tz.setLocalLocation(tz.getLocation('Europe/Rome'));
@@ -432,6 +444,7 @@ class NotificationService {
     required double importo,
     required DateTime dataScadenza,
   }) async {
+    if (Platform.isWindows) return false;
     final when = tz.TZDateTime.from(dataScadenza, tz.local);
 
     if (when.isBefore(tz.TZDateTime.now(tz.local))) return false;
@@ -3323,7 +3336,7 @@ class _NotificheScreenState extends State<NotificheScreen> {
             Text(
               abilitate == true
                   ? 'Le scadenze delle rate possono essere segnalate automaticamente.'
-                  : 'Per ricevere gli avvisi delle rate, abilita le notifiche per questa app nelle impostazioni di Android.',
+                  : 'Per ricevere gli avvisi delle rate, abilita le notifiche per questa app nelle impostazioni del dispositivo.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -3334,7 +3347,7 @@ class _NotificheScreenState extends State<NotificheScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Nota: Android può richiedere anche il permesso per gli allarmi esatti. Se viene negato, l’app utilizza comunque il sistema di notifica non esatto quando possibile.',
+              'Nota: alcuni dispositivi possono richiedere autorizzazioni aggiuntive per gli avvisi programmati.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12),
             ),
