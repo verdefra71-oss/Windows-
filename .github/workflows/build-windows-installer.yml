@@ -1,0 +1,143 @@
+name: Build Preventivi Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows EXE + Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+
+      - name: Create Windows platform files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter config --enable-windows-desktop
+          flutter create --platforms=windows --project-name preventivi_app .
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter pub get
+
+      - name: Generate launcher icon
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path "assets/app_icon.ico") {
+            Copy-Item "assets/app_icon.ico" "windows/runner/resources/app_icon.ico" -Force
+          }
+          dart run flutter_launcher_icons
+
+      - name: Analyze
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter analyze --no-fatal-infos
+
+      - name: Build Windows release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter build windows --release
+
+      - name: Verify release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = "build/windows/x64/runner/Release"
+          if (!(Test-Path "$release/preventivi_app.exe")) {
+            throw "preventivi_app.exe non trovato in $release"
+          }
+          Get-ChildItem $release -Recurse | Select-Object FullName,Length
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Compress-Archive `
+            -Path "build/windows/x64/runner/Release/*" `
+            -DestinationPath "Preventivi-Windows-Portable.zip" `
+            -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup --no-progress -y
+
+      - name: Create installer script
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          #define MyAppName "Gestione Preventivi"
+          #define MyAppVersion "1.0.0"
+          #define MyAppPublisher "Gestione Preventivi"
+          #define MyAppExeName "preventivi_app.exe"
+
+          [Setup]
+          AppId={{B5D5A9D2-8D8E-4E8B-9B1C-7D2C6F1D3A11}
+          AppName={#MyAppName}
+          AppVersion={#MyAppVersion}
+          AppPublisher={#MyAppPublisher}
+          DefaultDirName={autopf}\Gestione Preventivi
+          DefaultGroupName=Gestione Preventivi
+          OutputDir=installer
+          OutputBaseFilename=Gestione-Preventivi-Setup
+          Compression=lzma
+          SolidCompression=yes
+          ArchitecturesInstallIn64BitMode=x64
+          UninstallDisplayIcon={app}\{#MyAppExeName}
+          SetupIconFile=assets\app_icon.ico
+          PrivilegesRequired=admin
+          WizardStyle=modern
+
+          [Languages]
+          Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
+
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+
+          [Icons]
+          Name: "{group}\Gestione Preventivi"; Filename: "{app}\{#MyAppExeName}"
+          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\{#MyAppExeName}"
+
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"; Description: "Avvia Gestione Preventivi"; Flags: nowait postinstall skipifsilent
+          '@ | Set-Content -Path "installer.iss" -Encoding UTF8
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "ISCC.exe non trovato" }
+          & $iscc "installer.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Compilazione installer fallita" }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Preventivi-Windows
+          path: |
+            Preventivi-Windows-Portable.zip
+            installer/Gestione-Preventivi-Setup.exe
+          if-no-files-found: error
