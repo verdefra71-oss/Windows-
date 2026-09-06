@@ -536,7 +536,7 @@ class NotificationService {
       await _notifications.zonedSchedule(
         id,
         'Acconto in scadenza',
-        'Oggi scade l'acconto di €${importo.toStringAsFixed(2)} per $cliente.',
+        'Oggi scade l\'acconto di €${importo.toStringAsFixed(2)} per $cliente.',
         when,
         const NotificationDetails(
           android: AndroidNotificationDetails(
@@ -558,7 +558,7 @@ class NotificationService {
         await _notifications.zonedSchedule(
           id,
           'Acconto in scadenza',
-          'Oggi scade l'acconto di €${importo.toStringAsFixed(2)} per $cliente.',
+          'Oggi scade l\'acconto di €${importo.toStringAsFixed(2)} per $cliente.',
           when,
           const NotificationDetails(
             android: AndroidNotificationDetails(
@@ -789,7 +789,7 @@ class PdfGenerator {
               color: PdfColors.white,
             ),
             headerDecoration: pw.BoxDecoration(color: gold),
-            cellDecoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: pink, width: 0.6))),
+            cellDecoration: (index, data, rowNum) => pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: pink, width: 0.6))),
             cellAlignments: {
               0: pw.Alignment.center,
               1: pw.Alignment.centerLeft,
