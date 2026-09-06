@@ -75,7 +75,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -109,6 +109,7 @@ CREATE TABLE preventivi (
   numero_rate INTEGER NOT NULL,
   articoli TEXT NOT NULL DEFAULT '[]',
   iva_percent REAL NOT NULL DEFAULT 0,
+  sconto_percent REAL NOT NULL DEFAULT 0,
   accettato INTEGER NOT NULL DEFAULT 0
 )
 ''');
@@ -156,6 +157,11 @@ CREATE TABLE rate (
         if (oldVersion < 7) {
           await db.execute(
             "ALTER TABLE prodotti ADD COLUMN image_path TEXT",
+          );
+        }
+        if (oldVersion < 8) {
+          await db.execute(
+            "ALTER TABLE preventivi ADD COLUMN sconto_percent REAL NOT NULL DEFAULT 0",
           );
         }
       },
@@ -292,6 +298,7 @@ CREATE TABLE rate (
     required int numeroRate,
     required List<Map<String, dynamic>> articoli,
     required double ivaPercent,
+    required double scontoPercent,
     required bool accettato,
   }) async {
     final id = await (await database).insert('preventivi', {
@@ -302,6 +309,7 @@ CREATE TABLE rate (
       'numero_rate': numeroRate,
       'articoli': jsonEncode(articoli),
       'iva_percent': ivaPercent,
+      'sconto_percent': scontoPercent,
       'accettato': accettato ? 1 : 0,
     });
     await autoBackup();
@@ -315,6 +323,7 @@ CREATE TABLE rate (
     required int numeroRate,
     required List<Map<String, dynamic>> articoli,
     required double ivaPercent,
+    required double scontoPercent,
     required bool accettato,
   }) async {
     final result = await (await database).update(
@@ -325,6 +334,7 @@ CREATE TABLE rate (
         'numero_rate': numeroRate,
         'articoli': jsonEncode(articoli),
         'iva_percent': ivaPercent,
+        'sconto_percent': scontoPercent,
         'accettato': accettato ? 1 : 0,
       },
       where: 'id = ?',
@@ -547,6 +557,7 @@ class PdfGenerator {
     required List<Map<String, dynamic>> articoli,
     required int numeroRate,
     required double ivaPercent,
+    required double scontoPercent,
     required bool accettato,
   }) async {
     // Il font predefinito del pacchetto PDF non contiene il carattere euro (€).
@@ -602,8 +613,10 @@ class PdfGenerator {
         return sum + (prezzo * quantita);
       },
     );
-    final iva = imponibile * ivaPercent / 100;
-    final totale = imponibile + iva;
+    final sconto = imponibile * scontoPercent / 100;
+    final imponibileScontato = imponibile - sconto;
+    final iva = imponibileScontato * ivaPercent / 100;
+    final totale = imponibileScontato + iva;
     final quota = numeroRate > 0 ? totale / numeroRate : totale;
     final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
 
@@ -765,6 +778,10 @@ class PdfGenerator {
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 pw.Text('Imponibile: € ${imponibile.toStringAsFixed(2)}'),
+                if (scontoPercent > 0)
+                  pw.Text('Sconto ${scontoPercent.toStringAsFixed(0)}%: -€ ${sconto.toStringAsFixed(2)}'),
+                if (scontoPercent > 0)
+                  pw.Text('Imponibile scontato: € ${imponibileScontato.toStringAsFixed(2)}'),
                 if (ivaPercent == 0)
                   pw.Text(
                     'FUORI CAMPO IVA FCI',
@@ -1226,6 +1243,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
 
   int numeroRate = 1;
   double ivaPercent = 22;
+  double scontoPercent = 0;
   bool accettato = false;
   bool busy = false;
   String? _immagineProdottoSelezionato;
@@ -1239,9 +1257,10 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         },
       );
 
-  double get iva => imponibile * ivaPercent / 100;
-
-  double get totale => imponibile + iva;
+  double get sconto => imponibile * scontoPercent / 100;
+  double get imponibileScontato => imponibile - sconto;
+  double get iva => imponibileScontato * ivaPercent / 100;
+  double get totale => imponibileScontato + iva;
 
   Future<void> scegliCliente() async {
     final nome = await selezionaCliente(context);
@@ -1331,6 +1350,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         numeroRate: numeroRate,
         articoli: articoli,
         ivaPercent: ivaPercent,
+        scontoPercent: scontoPercent,
         accettato: accettato,
       );
 
@@ -1384,6 +1404,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         articoli: articoli,
         numeroRate: numeroRate,
         ivaPercent: ivaPercent,
+        scontoPercent: scontoPercent,
         accettato: accettato,
       );
 
@@ -1564,6 +1585,39 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
                 child: Column(
                   children: [
                     _riepilogoRiga('Imponibile', imponibile),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Sconto',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        SizedBox(
+                          width: 130,
+                          child: TextField(
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            textAlign: TextAlign.end,
+                            decoration: const InputDecoration(
+                              suffixText: '%',
+                              hintText: '0',
+                            ),
+                            controller: TextEditingController(
+                              text: scontoPercent == 0 ? '' : scontoPercent.toStringAsFixed(2),
+                            ),
+                            onChanged: (v) {
+                              final value = double.tryParse(v.replaceAll(',', '.'));
+                              if (value != null) {
+                                setState(() => scontoPercent = value.clamp(0, 100));
+                              } else if (v.isEmpty) {
+                                setState(() => scontoPercent = 0);
+                              }
+                            },
+                          ),
+                        ),
+                        Text('-€ ${sconto.toStringAsFixed(2)}'),
+                      ],
+                    ),
                     const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1872,6 +1926,7 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
                       articoli: _articoliDaPreventivo(x),
                       numeroRate: x['numero_rate'],
                       ivaPercent: (x['iva_percent'] as num?)?.toDouble() ?? 0,
+                      scontoPercent: (x['sconto_percent'] as num?)?.toDouble() ?? 0,
                       accettato: (x['accettato'] as num?)?.toInt() == 1,
                     );
                   },
@@ -2093,6 +2148,7 @@ class _ModificaPreventivoScreenState
   late List<Map<String, dynamic>> articoli;
   late int numeroRate;
   late double ivaPercent;
+  late double scontoPercent;
   late bool accettato;
 
   bool busy = false;
@@ -2106,9 +2162,10 @@ class _ModificaPreventivoScreenState
         },
       );
 
-  double get iva => imponibile * ivaPercent / 100;
-
-  double get totale => imponibile + iva;
+  double get sconto => imponibile * scontoPercent / 100;
+  double get imponibileScontato => imponibile - sconto;
+  double get iva => imponibileScontato * ivaPercent / 100;
+  double get totale => imponibileScontato + iva;
 
   Future<void> scegliCliente() async {
     final nome = await selezionaCliente(context);
@@ -2141,6 +2198,8 @@ class _ModificaPreventivoScreenState
         (widget.preventivo['numero_rate'] as num).toInt();
     ivaPercent =
         (widget.preventivo['iva_percent'] as num?)?.toDouble() ?? 0;
+    scontoPercent =
+        (widget.preventivo['sconto_percent'] as num?)?.toDouble() ?? 0;
     accettato = (widget.preventivo['accettato'] as num?)?.toInt() == 1;
 
     try {
@@ -2222,6 +2281,7 @@ class _ModificaPreventivoScreenState
         numeroRate: numeroRate,
         articoli: articoli,
         ivaPercent: ivaPercent,
+        scontoPercent: scontoPercent,
         accettato: accettato,
       );
 
@@ -2273,6 +2333,7 @@ class _ModificaPreventivoScreenState
         articoli: articoli,
         numeroRate: numeroRate,
         ivaPercent: ivaPercent,
+        scontoPercent: scontoPercent,
         accettato: accettato,
       );
 
@@ -2449,6 +2510,39 @@ class _ModificaPreventivoScreenState
                 child: Column(
                   children: [
                     _riepilogoRiga('Imponibile', imponibile),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Sconto',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        SizedBox(
+                          width: 130,
+                          child: TextField(
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            textAlign: TextAlign.end,
+                            decoration: const InputDecoration(
+                              suffixText: '%',
+                              hintText: '0',
+                            ),
+                            controller: TextEditingController(
+                              text: scontoPercent == 0 ? '' : scontoPercent.toStringAsFixed(2),
+                            ),
+                            onChanged: (v) {
+                              final value = double.tryParse(v.replaceAll(',', '.'));
+                              if (value != null) {
+                                setState(() => scontoPercent = value.clamp(0, 100));
+                              } else if (v.isEmpty) {
+                                setState(() => scontoPercent = 0);
+                              }
+                            },
+                          ),
+                        ),
+                        Text('-€ ${sconto.toStringAsFixed(2)}'),
+                      ],
+                    ),
                     const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
