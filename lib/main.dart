@@ -696,7 +696,7 @@ class PdfGenerator {
           buildBackground: (context) => pw.FullPage(
             ignoreMargins: true,
             child: pw.Container(
-              color: PdfColor.fromHex('#FFF8E1'),
+              color: PdfColors.white,
             ),
           ),
         ),
