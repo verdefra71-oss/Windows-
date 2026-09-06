@@ -381,13 +381,14 @@ CREATE TABLE rate (
     required String cliente,
     required double importo,
     required DateTime dataScadenza,
+    bool pagata = false,
   }) async {
     await (await database).insert('rate', {
       'preventivo_id': preventivoId,
       'cliente': cliente,
       'importo': importo,
       'data_scadenza': dataScadenza.toIso8601String(),
-      'pagata': 0,
+      'pagata': pagata ? 1 : 0,
     });
     await autoBackup();
   }
@@ -1450,6 +1451,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
             cliente: cliente,
             importo: importo,
             dataScadenza: data,
+            pagata: acconto['pagata'] == true || acconto['pagata'] == 1,
           );
         }
       }
@@ -1761,8 +1763,12 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
                           initialValue: importo == 0 ? '' : importo.toStringAsFixed(2),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: const InputDecoration(labelText: 'Importo €'),
-                          onChanged: (v) => acconti[i]['importo'] =
-                              double.tryParse(v.replaceAll(',', '.')) ?? 0,
+                          onChanged: (v) {
+                            setState(() {
+                              acconti[i]['importo'] =
+                                  double.tryParse(v.replaceAll(',', '.')) ?? 0;
+                            });
+                          },
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1779,7 +1785,9 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
                                 final d = DateTime(
                                   int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]),
                                 );
-                                acconti[i]['data'] = d.toIso8601String();
+                                setState(() {
+                                  acconti[i]['data'] = d.toIso8601String();
+                                });
                               }
                             } catch (_) {}
                           },
@@ -2364,6 +2372,34 @@ class _ModificaPreventivoScreenState
     } catch (_) {
       articoli = [];
     }
+
+    // Recupera eventuali acconti storici dalla tabella rate.
+    _recuperaAccontiDaRateSeNecessario();
+  }
+
+  Future<void> _recuperaAccontiDaRateSeNecessario() async {
+    if (acconti.isNotEmpty) return;
+
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query(
+        'rate',
+        where: 'preventivo_id = ?',
+        whereArgs: [(widget.preventivo['id'] as num).toInt()],
+        orderBy: 'data_scadenza ASC, id ASC',
+      );
+
+      if (!mounted || rows.isEmpty || acconti.isNotEmpty) return;
+
+      setState(() {
+        acconti = rows.map((r) => {
+          'importo': (r['importo'] as num?)?.toDouble() ?? 0.0,
+          'data': (r['data_scadenza'] ?? DateTime.now().toIso8601String()).toString(),
+          'pagata': (r['pagata'] as num?)?.toInt() == 1,
+        }).toList();
+        numeroRate = acconti.length;
+      });
+    } catch (_) {}
   }
 
   @override
@@ -2446,6 +2482,28 @@ class _ModificaPreventivoScreenState
         scontoPercent: scontoPercent,
         accettato: accettato,
       );
+
+      // Sincronizza anche la tabella rate quando si aggiungono,
+      // modificano o eliminano acconti da un preventivo esistente.
+      final dbConn = await db.database;
+      await dbConn.delete(
+        'rate',
+        where: 'preventivo_id = ?',
+        whereArgs: [preventivoId],
+      );
+      for (final acconto in acconti) {
+        final importo = (acconto['importo'] as num?)?.toDouble() ?? 0;
+        final data = DateTime.tryParse((acconto['data'] ?? '').toString());
+        if (importo > 0 && data != null) {
+          await db.insertRata(
+            preventivoId: preventivoId,
+            cliente: cliente,
+            importo: importo,
+            dataScadenza: data,
+            pagata: acconto['pagata'] == true || acconto['pagata'] == 1,
+          );
+        }
+      }
 
       for (int i = 0; i < acconti.length; i++) {
         final acconto = acconti[i];
