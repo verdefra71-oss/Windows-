@@ -408,10 +408,18 @@ CREATE TABLE rate (
       await txn.delete('preventivi');
       await txn.delete('prodotti');
       await txn.delete('clienti');
-      for (final row in clienti) await txn.insert('clienti', row);
-      for (final row in prodotti) await txn.insert('prodotti', row);
-      for (final row in preventivi) await txn.insert('preventivi', row);
-      for (final row in rate) await txn.insert('rate', row);
+      for (final row in clienti) {
+        await txn.insert('clienti', row);
+      }
+      for (final row in prodotti) {
+        await txn.insert('prodotti', row);
+      }
+      for (final row in preventivi) {
+        await txn.insert('preventivi', row);
+      }
+      for (final row in rate) {
+        await txn.insert('rate', row);
+      }
     });
     await createAutomaticBackup();
   }
@@ -607,7 +615,7 @@ class PdfGenerator {
       pw.SizedBox(height: 5),
       pw.Text(
         cliente,
-        style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold),
+        style: const pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold),
       ),
       if (indirizzo.isNotEmpty) pw.Text('Indirizzo: $indirizzo'),
       if (telefono.isNotEmpty) pw.Text('Telefono: $telefono'),
@@ -638,7 +646,7 @@ class PdfGenerator {
                   height: 150,
                   child: pw.Text(
                     'BTS',
-                    style: pw.TextStyle(
+                    style: const pw.TextStyle(
                       fontSize: 38,
                       fontWeight: pw.FontWeight.bold,
                     ),
@@ -694,7 +702,7 @@ class PdfGenerator {
                   '€ ${(((articoli[i]['prezzo'] as num?)?.toDouble() ?? 0) * ((articoli[i]['quantita'] as num?)?.toDouble() ?? 1)).toStringAsFixed(2)}',
                 ],
             ],
-            headerStyle: pw.TextStyle(
+            headerStyle: const pw.TextStyle(
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.white,
             ),
@@ -724,7 +732,7 @@ class PdfGenerator {
                 if (ivaPercent == 0)
                   pw.Text(
                     'FUORI CAMPO IVA FCI',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    style: const pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   )
                 else
                   pw.Text(
@@ -742,7 +750,7 @@ class PdfGenerator {
                   ),
                   child: pw.Text(
                     'TOTALE: € ${totale.toStringAsFixed(2)}',
-                    style: pw.TextStyle(
+                    style: const pw.TextStyle(
                       fontSize: 16,
                       fontWeight: pw.FontWeight.bold,
                       color: PdfColors.white,
@@ -3235,7 +3243,7 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
                                 child: Image.file(
-                                  File(path!),
+                                  File(path),
                                   width: 58,
                                   height: 58,
                                   fit: BoxFit.cover,
