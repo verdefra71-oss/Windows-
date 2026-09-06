@@ -2363,9 +2363,11 @@ class _ModificaPreventivoScreenState
       );
 
       articoli = (raw as List).map((e) {
+        final item = Map<String, dynamic>.from(e as Map);
         return {
-          'nome': e['nome'].toString(),
-          'prezzo': (e['prezzo'] as num).toDouble(),
+          'nome': item['nome'].toString(),
+          'prezzo': (item['prezzo'] as num?)?.toDouble() ?? 0.0,
+          'quantita': (item['quantita'] as num?)?.toDouble() ?? 1.0,
         };
       }).toList();
     } catch (_) {
@@ -2470,7 +2472,7 @@ class _ModificaPreventivoScreenState
       final preventivoId =
           (widget.preventivo['id'] as num).toInt();
 
-      await db.updatePreventivo(
+      final righeAggiornate = await db.updatePreventivo(
         id: preventivoId,
         cliente: cliente,
         totale: totale,
@@ -2481,6 +2483,10 @@ class _ModificaPreventivoScreenState
         scontoPercent: scontoPercent,
         accettato: accettato,
       );
+
+      if (righeAggiornate == 0) {
+        throw Exception('Preventivo non trovato nel database (ID $preventivoId).');
+      }
 
       // Sincronizza anche la tabella rate quando si aggiungono,
       // modificano o eliminano acconti da un preventivo esistente.
