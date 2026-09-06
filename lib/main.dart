@@ -75,7 +75,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -110,7 +110,8 @@ CREATE TABLE preventivi (
   articoli TEXT NOT NULL DEFAULT '[]',
   iva_percent REAL NOT NULL DEFAULT 0,
   sconto_percent REAL NOT NULL DEFAULT 0,
-  accettato INTEGER NOT NULL DEFAULT 0
+  accettato INTEGER NOT NULL DEFAULT 0,
+  acconti TEXT NOT NULL DEFAULT '[]'
 )
 ''');
 
@@ -163,6 +164,33 @@ CREATE TABLE rate (
           await db.execute(
             "ALTER TABLE preventivi ADD COLUMN sconto_percent REAL NOT NULL DEFAULT 0",
           );
+        }
+        if (oldVersion < 9) {
+          await db.execute(
+            "ALTER TABLE preventivi ADD COLUMN acconti TEXT NOT NULL DEFAULT '[]'",
+          );
+          final oldAcconti = await db.query('rate');
+          for (final r in oldAcconti) {
+            final pid = (r['preventivo_id'] as num?)?.toInt();
+            if (pid == null) continue;
+            final existing = await db.query('preventivi',
+                columns: ['acconti'], where: 'id = ?', whereArgs: [pid], limit: 1);
+            if (existing.isEmpty) continue;
+            final list = <Map<String, dynamic>>[];
+            try {
+              final raw = jsonDecode((existing.first['acconti'] ?? '[]').toString());
+              if (raw is List) {
+                list.addAll(raw.map((e) => Map<String, dynamic>.from(e as Map)));
+              }
+            } catch (_) {}
+            list.add({
+              'importo': (r['importo'] as num?)?.toDouble() ?? 0,
+              'data': (r['data_scadenza'] ?? DateTime.now().toIso8601String()).toString(),
+              'pagata': (r['pagata'] as num?)?.toInt() == 1,
+            });
+            await db.update('preventivi', {'acconti': jsonEncode(list)},
+                where: 'id = ?', whereArgs: [pid]);
+          }
         }
       },
     );
@@ -297,6 +325,7 @@ CREATE TABLE rate (
     required double totale,
     required int numeroRate,
     required List<Map<String, dynamic>> articoli,
+    required List<Map<String, dynamic>> acconti,
     required double ivaPercent,
     required double scontoPercent,
     required bool accettato,
@@ -308,6 +337,7 @@ CREATE TABLE rate (
       'totale': totale,
       'numero_rate': numeroRate,
       'articoli': jsonEncode(articoli),
+      'acconti': jsonEncode(acconti),
       'iva_percent': ivaPercent,
       'sconto_percent': scontoPercent,
       'accettato': accettato ? 1 : 0,
@@ -322,6 +352,7 @@ CREATE TABLE rate (
     required double totale,
     required int numeroRate,
     required List<Map<String, dynamic>> articoli,
+    required List<Map<String, dynamic>> acconti,
     required double ivaPercent,
     required double scontoPercent,
     required bool accettato,
@@ -333,6 +364,7 @@ CREATE TABLE rate (
         'totale': totale,
         'numero_rate': numeroRate,
         'articoli': jsonEncode(articoli),
+        'acconti': jsonEncode(acconti),
         'iva_percent': ivaPercent,
         'sconto_percent': scontoPercent,
         'accettato': accettato ? 1 : 0,
@@ -503,14 +535,14 @@ class NotificationService {
     try {
       await _notifications.zonedSchedule(
         id,
-        'Rata in scadenza',
-        'Oggi scade la rata di €${importo.toStringAsFixed(2)} per $cliente.',
+        'Acconto in scadenza',
+        'Oggi scade l'acconto di €${importo.toStringAsFixed(2)} per $cliente.',
         when,
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'rate_channel',
-            'Notifiche Rate',
-            channelDescription: 'Avvisi per le scadenze dei pagamenti rateali',
+            'Notifiche Acconti',
+            channelDescription: 'Avvisi per le scadenze degli acconti',
             importance: Importance.max,
             priority: Priority.high,
           ),
@@ -525,15 +557,15 @@ class NotificationService {
       try {
         await _notifications.zonedSchedule(
           id,
-          'Rata in scadenza',
-          'Oggi scade la rata di €${importo.toStringAsFixed(2)} per $cliente.',
+          'Acconto in scadenza',
+          'Oggi scade l'acconto di €${importo.toStringAsFixed(2)} per $cliente.',
           when,
           const NotificationDetails(
             android: AndroidNotificationDetails(
               'rate_channel',
-              'Notifiche Rate',
+              'Notifiche Acconti',
               channelDescription:
-                  'Avvisi per le scadenze dei pagamenti rateali',
+                  'Avvisi per le scadenze degli acconti',
               importance: Importance.max,
               priority: Priority.high,
             ),
@@ -556,6 +588,7 @@ class PdfGenerator {
     required String cliente,
     required List<Map<String, dynamic>> articoli,
     required int numeroRate,
+    required List<Map<String, dynamic>> acconti,
     required double ivaPercent,
     required double scontoPercent,
     required bool accettato,
@@ -617,10 +650,10 @@ class PdfGenerator {
     final imponibileScontato = imponibile - sconto;
     final iva = imponibileScontato * ivaPercent / 100;
     final totale = imponibileScontato + iva;
-    final quota = numeroRate > 0 ? totale / numeroRate : totale;
     final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
 
-    final gold = PdfColor.fromHex('#B8860B');
+    final gold = PdfColor.fromHex('#D96C9A');
+    final pink = PdfColor.fromHex('#F3B6CD');
     final dark = PdfColor.fromHex('#1E293B');
 
     String value(String key) => (datiCliente?[key] ?? '').toString().trim();
@@ -695,7 +728,7 @@ class PdfGenerator {
                       ),
                     ),
                     pw.SizedBox(height: 8),
-                    pw.Divider(color: gold),
+                    pw.Divider(color: pink),
                     pw.SizedBox(height: 8),
                     pw.Text('N. $numero', style: const pw.TextStyle(fontSize: 11)),
                     pw.Text('Data: $data', style: const pw.TextStyle(fontSize: 11)),
@@ -710,7 +743,7 @@ class PdfGenerator {
             padding: const pw.EdgeInsets.all(12),
             decoration: pw.BoxDecoration(
               color: PdfColors.grey100,
-              border: pw.Border.all(color: PdfColors.grey300),
+              border: pw.Border.all(color: pink),
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
             ),
             child: pw.Column(
@@ -755,7 +788,8 @@ class PdfGenerator {
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.white,
             ),
-            headerDecoration: pw.BoxDecoration(color: dark),
+            headerDecoration: pw.BoxDecoration(color: gold),
+            cellDecoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: pink, width: 0.6))),
             cellAlignments: {
               0: pw.Alignment.center,
               1: pw.Alignment.centerLeft,
@@ -813,22 +847,44 @@ class PdfGenerator {
               ],
             ),
           ),
-          if (numeroRate > 1) ...[
+          if (acconti.isNotEmpty) ...[
             pw.SizedBox(height: 18),
             pw.Container(
               width: double.infinity,
               padding: const pw.EdgeInsets.all(12),
               decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: gold),
+                border: pw.Border.all(color: pink),
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
               ),
-              child: pw.Text(
-                '$numeroRate rate mensili da € ${quota.toStringAsFixed(2)} ciascuna.',
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('ACCONTI / PAGAMENTI PROGRAMMATI',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: gold)),
+                  pw.SizedBox(height: 8),
+                  for (var i = 0; i < acconti.length; i++)
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 7),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border(bottom: pw.BorderSide(color: pink)),
+                      ),
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Acconto ${i + 1}'),
+                          pw.Text('€ ${((acconti[i]['importo'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'),
+                          pw.Text(DateFormat('dd/MM/yyyy').format(
+                            DateTime.tryParse((acconti[i]['data'] ?? '').toString()) ?? DateTime.now(),
+                          )),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
           pw.SizedBox(height: 25),
-          pw.Divider(color: gold),
+          pw.Divider(color: pink),
           pw.SizedBox(height: 6),
           pw.Text(
             'Documento generato da Gestione Preventivi.',
@@ -856,7 +912,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int preventivi = 0;
   int clienti = 0;
   int prodotti = 0;
-  int rate = 0;
+  int acconti = 0;
   bool loading = true;
 
   @override
@@ -868,14 +924,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> caricaStatistiche() async {
     final db = DatabaseHelper.instance;
     final results = await Future.wait([
-      db.getPreventivi(), db.getClienti(), db.getProdotti(), db.getRate(),
+      db.getPreventivi(), db.getClienti(), db.getProdotti(),
     ]);
     if (!mounted) return;
     setState(() {
       preventivi = results[0].length;
       clienti = results[1].length;
       prodotti = results[2].length;
-      rate = results[3].length;
+      acconti = results[0].fold<int>(0, (n, p) {
+        try {
+          final raw = jsonDecode((p['acconti'] ?? '[]').toString());
+          return n + (raw is List ? raw.length : 0);
+        } catch (_) { return n; }
+      });
       loading = false;
     });
   }
@@ -932,7 +993,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(child: _menuTile(Icons.inventory_2_rounded, 'Prodotti / Servizi', 'Gestisci prodotti e prezzi', () => apri(const ProdottiScreen()))),
               const SizedBox(width: 8),
-              Expanded(child: _menuTile(Icons.payments_rounded, 'Rate e scadenze', 'Controlla le rate', () => apri(const RateScreen()))),
+              Expanded(child: _menuTile(Icons.payments_rounded, 'Acconti e scadenze', 'Gestisci gli acconti', () => apri(const AccontiScreen()))),
             ]),
             const SizedBox(height: 7),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -952,7 +1013,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(children: [
               Expanded(child: _statCard(Icons.inventory_2_rounded, 'Prodotti', prodotti)),
               const SizedBox(width: 8),
-              Expanded(child: _statCard(Icons.payments_rounded, 'Rate', rate)),
+              Expanded(child: _statCard(Icons.payments_rounded, 'Acconti', acconti)),
             ]),
           ],
         ),
@@ -1241,7 +1302,8 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
 
   final List<Map<String, dynamic>> articoli = [];
 
-  int numeroRate = 1;
+  int numeroRate = 0;
+  final List<Map<String, dynamic>> acconti = [];
   double ivaPercent = 22;
   double scontoPercent = 0;
   bool accettato = false;
@@ -1337,6 +1399,19 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
       return;
     }
 
+    final totaleAcconti = acconti.fold<double>(
+      0, (sum, a) => sum + ((a['importo'] as num?)?.toDouble() ?? 0),
+    );
+    if (acconti.any((a) => ((a['importo'] as num?)?.toDouble() ?? 0) <= 0) ||
+        totaleAcconti > totale + 0.01) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Controlla gli acconti: gli importi devono essere positivi e non superiori al totale.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => busy = true);
 
     try {
@@ -1349,6 +1424,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         totale: totale,
         numeroRate: numeroRate,
         articoli: articoli,
+        acconti: acconti,
         ivaPercent: ivaPercent,
         scontoPercent: scontoPercent,
         accettato: accettato,
@@ -1364,33 +1440,13 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         await db.insertCliente(nome: cliente);
       }
 
-      if (numeroRate > 1) {
-        final base = totale / numeroRate;
-        double somma = 0;
-
-        for (int i = 1; i <= numeroRate; i++) {
-          final data = DateTime(
-            DateTime.now().year,
-            DateTime.now().month + i,
-            DateTime.now().day,
-            9,
-          );
-
-          final importo = i == numeroRate
-              ? double.parse((totale - somma).toStringAsFixed(2))
-              : double.parse(base.toStringAsFixed(2));
-
-          somma += importo;
-
-          await db.insertRata(
-            preventivoId: id,
-            cliente: cliente,
-            importo: importo,
-            dataScadenza: data,
-          );
-
+      for (int i = 0; i < acconti.length; i++) {
+        final acconto = acconti[i];
+        final importo = (acconto['importo'] as num?)?.toDouble() ?? 0;
+        final data = DateTime.tryParse((acconto['data'] ?? '').toString());
+        if (importo > 0 && data != null) {
           await NotificationService().programmaNotificaRata(
-            id: id * 100 + i,
+            id: id * 100 + i + 1,
             cliente: cliente,
             importo: importo,
             dataScadenza: data,
@@ -1403,6 +1459,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         cliente: cliente,
         articoli: articoli,
         numeroRate: numeroRate,
+        acconti: acconti,
         ivaPercent: ivaPercent,
         scontoPercent: scontoPercent,
         accettato: accettato,
@@ -1415,7 +1472,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
           SnackBar(
             content: Text(
               notificheOk
-                  ? 'Preventivo $numero salvato e scadenze programmate.'
+                  ? 'Preventivo $numero salvato e acconti programmati.'
                   : 'Preventivo $numero salvato. Abilita le notifiche per ricevere gli avvisi.',
             ),
           ),
@@ -1658,43 +1715,113 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Numero rate mensili',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  'Acconti',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
-                DropdownButton<int>(
-                  value: numeroRate,
-                  items: List.generate(
-                    12,
-                    (i) => DropdownMenuItem(
-                      value: i + 1,
-                      child: Text(
-                        '${i + 1} ${i == 0 ? 'rata' : 'rate'}',
-                      ),
-                    ),
-                  ),
-                  onChanged: (v) {
-                    if (v != null) {
-                      setState(() => numeroRate = v);
-                    }
-                  },
+                FilledButton.icon(
+                  onPressed: () => setState(() {
+                    acconti.add({
+                      'importo': 0.0,
+                      'data': DateTime.now().toIso8601String(),
+                      'pagata': false,
+                    });
+                    numeroRate = acconti.length;
+                  }),
+                  icon: const Icon(Icons.add),
+                  label: const Text('AGGIUNGI ACCONTO'),
                 ),
               ],
             ),
-            if (numeroRate > 1)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Rata indicativa: € '
-                  '${(totale / numeroRate).toStringAsFixed(2)}',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
+            const SizedBox(height: 6),
+            const Text('Inserisci liberamente importo e data di ogni acconto.'),
+            const SizedBox(height: 8),
+            if (acconti.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(14),
+                  child: Text('Nessun acconto inserito.'),
                 ),
               ),
+            ...acconti.asMap().entries.map((entry) {
+              final i = entry.key;
+              final a = entry.value;
+              final importo = (a['importo'] as num?)?.toDouble() ?? 0;
+              final data = DateTime.tryParse((a['data'] ?? '').toString()) ?? DateTime.now();
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      CircleAvatar(child: Text('${i + 1}')),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          key: ValueKey('acconto_importo_$i'),
+                          initialValue: importo == 0 ? '' : importo.toStringAsFixed(2),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Importo €'),
+                          onChanged: (v) => acconti[i]['importo'] =
+                              double.tryParse(v.replaceAll(',', '.')) ?? 0,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          key: ValueKey('acconto_data_$i'),
+                          initialValue: DateFormat('dd/MM/yyyy').format(data),
+                          keyboardType: TextInputType.datetime,
+                          decoration: const InputDecoration(labelText: 'Data'),
+                          onChanged: (v) {
+                            try {
+                              final parts = v.trim().split('/');
+                              if (parts.length == 3) {
+                                final d = DateTime(
+                                  int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]),
+                                );
+                                acconti[i]['data'] = d.toIso8601String();
+                              }
+                            } catch (_) {}
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Elimina acconto',
+                        onPressed: () => setState(() {
+                          acconti.removeAt(i);
+                          numeroRate = acconti.length;
+                        }),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            if (acconti.isNotEmpty) ...[
+              Builder(builder: (_) {
+                final sommaAcconti = acconti.fold<double>(
+                  0, (sum, a) => sum + ((a['importo'] as num?)?.toDouble() ?? 0),
+                );
+                final residuo = totale - sommaAcconti;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Totale acconti: € ${sommaAcconti.toStringAsFixed(2)}'),
+                      Text(
+                        'Residuo: € ${residuo.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: residuo < 0 ? Colors.red : Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
             const SizedBox(height: 12),
             Card(
               child: CheckboxListTile(
@@ -1727,7 +1854,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
                 label: Text(
                   busy
                       ? 'SALVATAGGIO...'
-                      : 'GENERA PDF E PROGRAMMA RATE',
+                      : 'GENERA PDF E PROGRAMMA ACCONTI',
                 ),
               ),
             ),
@@ -1872,9 +1999,9 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
               ),
               _detailRow(
                 Icons.event_repeat,
-                'Rate',
+                'Acconti',
                 '${x['numero_rate']} '
-                '${x['numero_rate'] == 1 ? 'rata' : 'rate'}',
+                '${x['numero_rate'] == 1 ? 'acconto' : 'acconti'}',
               ),
               _detailRow(
                 Icons.check_circle_outline,
@@ -1925,6 +2052,7 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
                       cliente: x['cliente'],
                       articoli: _articoliDaPreventivo(x),
                       numeroRate: x['numero_rate'],
+                      acconti: _accontiDaPreventivo(x),
                       ivaPercent: (x['iva_percent'] as num?)?.toDouble() ?? 0,
                       scontoPercent: (x['sconto_percent'] as num?)?.toDouble() ?? 0,
                       accettato: (x['accettato'] as num?)?.toInt() == 1,
@@ -1958,6 +2086,16 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
     } catch (_) {
       return [];
     }
+  }
+
+  List<Map<String, dynamic>> _accontiDaPreventivo(Map<String, dynamic> x) {
+    try {
+      final raw = jsonDecode((x['acconti'] ?? '[]').toString());
+      if (raw is List) {
+        return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    } catch (_) {}
+    return [];
   }
 
   Widget _detailRow(
@@ -2092,7 +2230,7 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
                             '${x['cliente']}\n'
                             '${DateFormat('dd/MM/yyyy').format(data)} • '
                             '${x['numero_rate']} '
-                            '${x['numero_rate'] == 1 ? 'rata' : 'rate'}',
+                            '${x['numero_rate'] == 1 ? 'acconto' : 'acconti'}',
                           ),
                         ),
                         isThreeLine: true,
@@ -2147,6 +2285,7 @@ class _ModificaPreventivoScreenState
 
   late List<Map<String, dynamic>> articoli;
   late int numeroRate;
+  late List<Map<String, dynamic>> acconti;
   late double ivaPercent;
   late double scontoPercent;
   late bool accettato;
@@ -2196,6 +2335,15 @@ class _ModificaPreventivoScreenState
 
     numeroRate =
         (widget.preventivo['numero_rate'] as num).toInt();
+    try {
+      final rawAcconti = jsonDecode((widget.preventivo['acconti'] ?? '[]').toString());
+      acconti = rawAcconti is List
+          ? rawAcconti.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+          : <Map<String, dynamic>>[];
+    } catch (_) {
+      acconti = [];
+    }
+    numeroRate = acconti.length;
     ivaPercent =
         (widget.preventivo['iva_percent'] as num?)?.toDouble() ?? 0;
     scontoPercent =
@@ -2267,6 +2415,19 @@ class _ModificaPreventivoScreenState
       return;
     }
 
+    final totaleAcconti = acconti.fold<double>(
+      0, (sum, a) => sum + ((a['importo'] as num?)?.toDouble() ?? 0),
+    );
+    if (acconti.any((a) => ((a['importo'] as num?)?.toDouble() ?? 0) <= 0) ||
+        totaleAcconti > totale + 0.01) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Controlla gli acconti: gli importi devono essere positivi e non superiori al totale.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => busy = true);
 
     try {
@@ -2280,46 +2441,19 @@ class _ModificaPreventivoScreenState
         totale: totale,
         numeroRate: numeroRate,
         articoli: articoli,
+        acconti: acconti,
         ivaPercent: ivaPercent,
         scontoPercent: scontoPercent,
         accettato: accettato,
       );
 
-      final database = await db.database;
-
-      await database.delete(
-        'rate',
-        where: 'preventivo_id = ?',
-        whereArgs: [preventivoId],
-      );
-
-      if (numeroRate > 1) {
-        final base = totale / numeroRate;
-        double somma = 0;
-
-        for (int i = 1; i <= numeroRate; i++) {
-          final data = DateTime(
-            DateTime.now().year,
-            DateTime.now().month + i,
-            DateTime.now().day,
-            9,
-          );
-
-          final importo = i == numeroRate
-              ? double.parse((totale - somma).toStringAsFixed(2))
-              : double.parse(base.toStringAsFixed(2));
-
-          somma += importo;
-
-          await db.insertRata(
-            preventivoId: preventivoId,
-            cliente: cliente,
-            importo: importo,
-            dataScadenza: data,
-          );
-
+      for (int i = 0; i < acconti.length; i++) {
+        final acconto = acconti[i];
+        final importo = (acconto['importo'] as num?)?.toDouble() ?? 0;
+        final data = DateTime.tryParse((acconto['data'] ?? '').toString());
+        if (importo > 0 && data != null) {
           await NotificationService().programmaNotificaRata(
-            id: preventivoId * 100 + i,
+            id: preventivoId * 100 + i + 1,
             cliente: cliente,
             importo: importo,
             dataScadenza: data,
@@ -2332,6 +2466,7 @@ class _ModificaPreventivoScreenState
         cliente: cliente,
         articoli: articoli,
         numeroRate: numeroRate,
+        acconti: acconti,
         ivaPercent: ivaPercent,
         scontoPercent: scontoPercent,
         accettato: accettato,
@@ -2344,7 +2479,7 @@ class _ModificaPreventivoScreenState
           SnackBar(
             content: Text(
               notificheOk
-                  ? 'Preventivo modificato, PDF rigenerato e scadenze programmate.'
+                  ? 'Preventivo modificato, PDF rigenerato e acconti programmati.'
                   : 'Preventivo modificato. Abilita le notifiche per ricevere gli avvisi.',
             ),
           ),
@@ -2583,43 +2718,113 @@ class _ModificaPreventivoScreenState
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Numero rate mensili',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  'Acconti',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
-                DropdownButton<int>(
-                  value: numeroRate,
-                  items: List.generate(
-                    12,
-                    (i) => DropdownMenuItem(
-                      value: i + 1,
-                      child: Text(
-                        '${i + 1} ${i == 0 ? 'rata' : 'rate'}',
-                      ),
-                    ),
-                  ),
-                  onChanged: (v) {
-                    if (v != null) {
-                      setState(() => numeroRate = v);
-                    }
-                  },
+                FilledButton.icon(
+                  onPressed: () => setState(() {
+                    acconti.add({
+                      'importo': 0.0,
+                      'data': DateTime.now().toIso8601String(),
+                      'pagata': false,
+                    });
+                    numeroRate = acconti.length;
+                  }),
+                  icon: const Icon(Icons.add),
+                  label: const Text('AGGIUNGI ACCONTO'),
                 ),
               ],
             ),
-            if (numeroRate > 1)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Rata indicativa: € '
-                  '${(totale / numeroRate).toStringAsFixed(2)}',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
+            const SizedBox(height: 6),
+            const Text('Inserisci liberamente importo e data di ogni acconto.'),
+            const SizedBox(height: 8),
+            if (acconti.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(14),
+                  child: Text('Nessun acconto inserito.'),
                 ),
               ),
+            ...acconti.asMap().entries.map((entry) {
+              final i = entry.key;
+              final a = entry.value;
+              final importo = (a['importo'] as num?)?.toDouble() ?? 0;
+              final data = DateTime.tryParse((a['data'] ?? '').toString()) ?? DateTime.now();
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      CircleAvatar(child: Text('${i + 1}')),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          key: ValueKey('acconto_importo_$i'),
+                          initialValue: importo == 0 ? '' : importo.toStringAsFixed(2),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Importo €'),
+                          onChanged: (v) => acconti[i]['importo'] =
+                              double.tryParse(v.replaceAll(',', '.')) ?? 0,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          key: ValueKey('acconto_data_$i'),
+                          initialValue: DateFormat('dd/MM/yyyy').format(data),
+                          keyboardType: TextInputType.datetime,
+                          decoration: const InputDecoration(labelText: 'Data'),
+                          onChanged: (v) {
+                            try {
+                              final parts = v.trim().split('/');
+                              if (parts.length == 3) {
+                                final d = DateTime(
+                                  int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]),
+                                );
+                                acconti[i]['data'] = d.toIso8601String();
+                              }
+                            } catch (_) {}
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Elimina acconto',
+                        onPressed: () => setState(() {
+                          acconti.removeAt(i);
+                          numeroRate = acconti.length;
+                        }),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            if (acconti.isNotEmpty) ...[
+              Builder(builder: (_) {
+                final sommaAcconti = acconti.fold<double>(
+                  0, (sum, a) => sum + ((a['importo'] as num?)?.toDouble() ?? 0),
+                );
+                final residuo = totale - sommaAcconti;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Totale acconti: € ${sommaAcconti.toStringAsFixed(2)}'),
+                      Text(
+                        'Residuo: € ${residuo.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: residuo < 0 ? Colors.red : Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
             const SizedBox(height: 12),
             Card(
               child: CheckboxListTile(
@@ -3657,8 +3862,8 @@ class _NotificheScreenState extends State<NotificheScreen> {
             const SizedBox(height: 12),
             Text(
               abilitate == true
-                  ? 'Le scadenze delle rate possono essere segnalate automaticamente.'
-                  : 'Per ricevere gli avvisi delle rate, abilita le notifiche per questa app nelle impostazioni di Android.',
+                  ? 'Le scadenze degli acconti possono essere segnalate automaticamente.'
+                  : 'Per ricevere gli avvisi degli acconti, abilita le notifiche per questa app nelle impostazioni di Android.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -3680,68 +3885,68 @@ class _NotificheScreenState extends State<NotificheScreen> {
   }
 }
 
-class RateScreen extends StatelessWidget {
-  const RateScreen({super.key});
+class AccontiScreen extends StatelessWidget {
+  const AccontiScreen({super.key});
+
+  Future<List<Map<String, dynamic>>> _carica() async {
+    final preventivi = await DatabaseHelper.instance.getPreventivi();
+    final result = <Map<String, dynamic>>[];
+    for (final p in preventivi) {
+      try {
+        final raw = jsonDecode((p['acconti'] ?? '[]').toString());
+        if (raw is List) {
+          for (final e in raw) {
+            final a = Map<String, dynamic>.from(e as Map);
+            result.add({
+              ...a,
+              'cliente': p['cliente'],
+              'numero': p['numero'],
+            });
+          }
+        }
+      } catch (_) {}
+    }
+    result.sort((a, b) => ((a['data'] ?? '') as String).compareTo((b['data'] ?? '') as String));
+    return result;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rate e scadenze'),
-      ),
+      appBar: AppBar(title: const Text('Acconti e scadenze')),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: DatabaseHelper.instance.getRate(),
+        future: _carica(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          final rate = snapshot.data!;
-
-          if (rate.isEmpty) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final acconti = snapshot.data!;
+          if (acconti.isEmpty) {
             return const _EmptyState(
               icon: Icons.payments_outlined,
-              text: 'Nessuna rata programmata.',
+              text: 'Nessun acconto programmato.',
             );
           }
-
           return ListView.separated(
             padding: const EdgeInsets.all(12),
-            itemCount: rate.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: 8),
+            itemCount: acconti.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
-              final x = rate[index];
-
-              final data = DateTime.parse(
-                x['data_scadenza'],
-              );
-
-              final pagata = x['pagata'] == 1;
-
+              final x = acconti[index];
+              final data = DateTime.tryParse((x['data'] ?? '').toString()) ?? DateTime.now();
+              final pagato = x['pagata'] == true || x['pagata'] == 1;
               return Card(
                 child: ListTile(
                   leading: CircleAvatar(
-                    child: Icon(
-                      pagata
-                          ? Icons.check
-                          : Icons.schedule,
-                    ),
+                    child: Icon(pagato ? Icons.check : Icons.schedule),
                   ),
-                  title: Text(
-                    x['cliente'],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  title: Text(x['cliente'].toString(),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(
-                    'Scadenza: '
-                    '${DateFormat('dd/MM/yyyy').format(data)}',
+                    '${x['numero']} • Acconto ${index + 1}\nData: ${DateFormat('dd/MM/yyyy').format(data)}',
                   ),
+                  isThreeLine: true,
                   trailing: Text(
-                    '€ ${(x['importo'] as num).toStringAsFixed(2)}',
+                    '€ ${((x['importo'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
               );
