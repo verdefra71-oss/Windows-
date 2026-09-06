@@ -567,6 +567,22 @@ class PdfGenerator {
       logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
     } catch (_) {}
 
+    // Carica le immagini JPG associate ai prodotti direttamente nel PDF.
+    // I file vengono letti dal percorso salvato nel database; se un'immagine
+    // non è disponibile, il PDF continua a essere generato senza foto.
+    final immaginiArticoli = <int, pw.MemoryImage>{};
+    for (var i = 0; i < articoli.length; i++) {
+      final imagePath = articoli[i]['image_path']?.toString().trim();
+      if (imagePath != null &&
+          imagePath.isNotEmpty &&
+          await File(imagePath).exists()) {
+        try {
+          final bytes = await File(imagePath).readAsBytes();
+          immaginiArticoli[i] = pw.MemoryImage(bytes);
+        } catch (_) {}
+      }
+    }
+
     // Recupera l'anagrafica completa per stampare tutti i dati del cliente.
     try {
       final clienti = await DatabaseHelper.instance.getClienti();
@@ -696,7 +712,27 @@ class PdfGenerator {
               for (var i = 0; i < articoli.length; i++)
                 [
                   '${i + 1}',
-                  (articoli[i]['nome'] ?? '').toString(),
+                  immaginiArticoli.containsKey(i)
+                      ? pw.Row(
+                          crossAxisAlignment: pw.CrossAxisAlignment.center,
+                          children: [
+                            pw.Container(
+                              width: 48,
+                              height: 48,
+                              margin: const pw.EdgeInsets.only(right: 8),
+                              child: pw.Image(
+                                immaginiArticoli[i]!,
+                                fit: pw.BoxFit.contain,
+                              ),
+                            ),
+                            pw.Expanded(
+                              child: pw.Text(
+                                (articoli[i]['nome'] ?? '').toString(),
+                              ),
+                            ),
+                          ],
+                        )
+                      : pw.Text((articoli[i]['nome'] ?? '').toString()),
                   ((articoli[i]['quantita'] as num?)?.toDouble() ?? 1).toStringAsFixed(2),
                   '€ ${((articoli[i]['prezzo'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
                   '€ ${(((articoli[i]['prezzo'] as num?)?.toDouble() ?? 0) * ((articoli[i]['quantita'] as num?)?.toDouble() ?? 1)).toStringAsFixed(2)}',
@@ -1125,7 +1161,24 @@ Future<Map<String, dynamic>?> selezionaProdotto(BuildContext context) async {
                             shrinkWrap: true,
                             itemCount: filtrati.length,
                             itemBuilder: (_, i) => ListTile(
-                              leading: const Icon(Icons.inventory_2_outlined),
+                              leading: (() {
+                                final imagePath =
+                                    filtrati[i]['image_path']?.toString();
+                                if (imagePath != null &&
+                                    imagePath.isNotEmpty &&
+                                    File(imagePath).existsSync()) {
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Image.file(
+                                      File(imagePath),
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  );
+                                }
+                                return const Icon(Icons.inventory_2_outlined);
+                              })(),
                               title: Text(filtrati[i]['nome']),
                               trailing: Text(
                                 '€ ${(filtrati[i]['prezzo'] as num).toDouble().toStringAsFixed(2)}',
@@ -1175,6 +1228,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
   double ivaPercent = 22;
   bool accettato = false;
   bool busy = false;
+  String? _immagineProdottoSelezionato;
 
   double get imponibile => articoli.fold<double>(
         0,
@@ -1204,6 +1258,7 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
         prezzoController.text =
             (prodotto['prezzo'] as num).toDouble().toStringAsFixed(2);
         quantitaController.text = '1';
+        _immagineProdottoSelezionato = prodotto['image_path']?.toString();
       });
     }
   }
@@ -1236,10 +1291,16 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
     }
 
     setState(() {
-      articoli.add({'nome': nome, 'prezzo': prezzo, 'quantita': quantita});
+      articoli.add({
+        'nome': nome,
+        'prezzo': prezzo,
+        'quantita': quantita,
+        'image_path': _immagineProdottoSelezionato,
+      });
       prodottoController.clear();
       prezzoController.clear();
       quantitaController.text = '1';
+      _immagineProdottoSelezionato = null;
     });
   }
 
@@ -1836,6 +1897,7 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
           'nome': e['nome'].toString(),
           'prezzo': (e['prezzo'] as num).toDouble(),
           'quantita': (e['quantita'] as num?)?.toDouble() ?? 1,
+          'image_path': e['image_path']?.toString(),
         };
       }).toList();
     } catch (_) {
