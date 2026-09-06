@@ -1451,7 +1451,6 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
             cliente: cliente,
             importo: importo,
             dataScadenza: data,
-            pagata: acconto['pagata'] == true || acconto['pagata'] == 1,
           );
         }
       }
