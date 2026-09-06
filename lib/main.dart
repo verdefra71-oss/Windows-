@@ -37,14 +37,14 @@ class PreventiviApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFD4AF37),
+          seedColor: const Color(0xFFE48BA8),
           brightness: Brightness.light,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFFF8E1),
+        scaffoldBackgroundColor: const Color(0xFFFFF1F6),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFD4AF37),
-          foregroundColor: Color(0xFF3B2F0B),
+          backgroundColor: Color(0xFFE48BA8),
+          foregroundColor: Color(0xFF4A2332),
           elevation: 0,
           centerTitle: true,
         ),
@@ -75,7 +75,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -94,7 +94,8 @@ CREATE TABLE clienti (
 CREATE TABLE prodotti (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nome TEXT NOT NULL,
-  prezzo REAL NOT NULL
+  prezzo REAL NOT NULL,
+  image_path TEXT
 )
 ''');
 
@@ -152,6 +153,11 @@ CREATE TABLE rate (
             "ALTER TABLE preventivi ADD COLUMN accettato INTEGER NOT NULL DEFAULT 0",
           );
         }
+        if (oldVersion < 7) {
+          await db.execute(
+            "ALTER TABLE prodotti ADD COLUMN image_path TEXT",
+          );
+        }
       },
     );
   }
@@ -175,10 +181,12 @@ CREATE TABLE rate (
   Future<int> insertProdotto({
     required String nome,
     required double prezzo,
+    String? imagePath,
   }) async {
     final id = await (await database).insert('prodotti', {
       'nome': nome,
       'prezzo': prezzo,
+      'image_path': imagePath,
     });
     await autoBackup();
     return id;
@@ -188,10 +196,11 @@ CREATE TABLE rate (
     required int id,
     required String nome,
     required double prezzo,
+    String? imagePath,
   }) async {
     final result = await (await database).update(
       'prodotti',
-      {'nome': nome, 'prezzo': prezzo},
+      {'nome': nome, 'prezzo': prezzo, 'image_path': imagePath},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -842,8 +851,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: RefreshIndicator(
-        color: const Color(0xFF2B240D),
-        backgroundColor: const Color(0xFFF2C94C),
+        color: const Color(0xFF4A2332),
+        backgroundColor: const Color(0xFFEC91AE),
         onRefresh: caricaStatistiche,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -851,7 +860,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             _heroCard(),
             const SizedBox(height: 10),
-            const Text('Gestione', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF3B2F0B))),
+            const Text('Gestione', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF4A2332))),
             const SizedBox(height: 7),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(child: _menuTile(Icons.receipt_long_rounded, 'Lista preventivi', 'Visualizza e modifica', () => apri(const ListaPreventiviScreen()))),
@@ -871,7 +880,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(child: _menuTile(Icons.notifications_active_rounded, 'Notifiche', 'Avvisi delle scadenze', () => apri(const NotificheScreen()))),
             ]),
             const SizedBox(height: 10),
-            const Text('Riepilogo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF5C4A12))),
+            const Text('Riepilogo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF7A3A52))),
             const SizedBox(height: 6),
             Row(children: [
               Expanded(child: _statCard(Icons.receipt_long_rounded, 'Preventivi', preventivi)),
@@ -900,7 +909,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xFFE8C65A), Color(0xFFD4AF37), Color(0xFFB8860B)],
+            colors: [Color(0xFFF0A8BE), Color(0xFFE48BA8), Color(0xFFC45B7A)],
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [BoxShadow(blurRadius: 18, offset: Offset(0, 8), color: Color(0x22000000))],
@@ -915,16 +924,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 18),
           const Text('Gestione Preventivi', textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF2B240D), fontSize: 26, fontWeight: FontWeight.w900)),
+            style: TextStyle(color: Color(0xFF4A2332), fontSize: 26, fontWeight: FontWeight.w900)),
           const SizedBox(height: 5),
           const Text('Crea, salva e condividi i tuoi preventivi.', textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF5D501D), fontSize: 14)),
+            style: TextStyle(color: Color(0xFF725C65), fontSize: 14)),
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity, height: 50,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF3B2F0B), foregroundColor: Colors.white,
+                backgroundColor: const Color(0xFF9E3F63), foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               ),
               onPressed: () => apri(const NuovoPreventivoScreen()),
@@ -951,13 +960,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(children: [
             Container(
               width: 44, height: 44,
-              decoration: BoxDecoration(color: const Color(0xFFFFF1BD), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, size: 28, color: const Color(0xFF8A6A00)),
+              decoration: BoxDecoration(color: const Color(0xFFF9DCE7), borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, size: 28, color: const Color(0xFF9E3F63)),
             ),
             const SizedBox(height: 4),
             Text(loading ? '…' : '$value',
-              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Color(0xFF29230F))),
-            Text(label, style: const TextStyle(color: Color(0xFF6B6450))),
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Color(0xFF3D2630))),
+            Text(label, style: const TextStyle(color: Color(0xFF725C65))),
           ]),
         ),
       ),
@@ -975,12 +984,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: ListTile(
             leading: Container(
               width: 48, height: 48,
-              decoration: BoxDecoration(color: const Color(0xFFFFF1BD), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, size: 28, color: const Color(0xFF8A6A00)),
+              decoration: BoxDecoration(color: const Color(0xFFF9DCE7), borderRadius: BorderRadius.circular(14)),
+              child: Icon(icon, size: 28, color: const Color(0xFF9E3F63)),
             ),
             title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(subtitle),
-            trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Color(0xFF8A6A00)),
+            trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Color(0xFF9E3F63)),
           ),
         ),
       ),
@@ -2874,7 +2883,6 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
   Future<void> _carica() async {
     setState(() => loading = true);
     final data = await DatabaseHelper.instance.getProdotti();
-
     if (mounted) {
       setState(() {
         prodotti = data;
@@ -2883,114 +2891,214 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
     }
   }
 
+  Future<String?> _caricaImmagineJpg() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg'],
+      withData: false,
+    );
+    if (result == null || result.files.single.path == null) return null;
+
+    final source = File(result.files.single.path!);
+    if (!await source.exists()) return null;
+
+    final dir = await getApplicationDocumentsDirectory();
+    final imagesDir = Directory(p.join(dir.path, 'prodotti_immagini'));
+    if (!await imagesDir.exists()) {
+      await imagesDir.create(recursive: true);
+    }
+
+    final ext = p.extension(source.path).toLowerCase();
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final destination = File(
+      p.join(imagesDir.path, 'prodotto_$stamp$ext'),
+    );
+    await source.copy(destination.path);
+    return destination.path;
+  }
+
   Future<void> _formProdotto([Map<String, dynamic>? prodotto]) async {
     final nome = TextEditingController(text: prodotto?['nome'] ?? '');
-
     final prezzo = TextEditingController(
       text: prodotto == null
           ? ''
           : (prodotto['prezzo'] as num).toStringAsFixed(2),
     );
-
+    String? imagePath = prodotto?['image_path']?.toString();
+    bool imageChanged = false;
     final key = GlobalKey<FormState>();
 
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-        ),
-        child: Form(
-          key: key,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  prodotto == null
-                      ? 'Nuovo prodotto / servizio'
-                      : 'Modifica prodotto / servizio',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                TextFormField(
-                  controller: nome,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    labelText: 'Nome prodotto / servizio',
-                    prefixIcon: Icon(Icons.inventory_2_outlined),
-                  ),
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Inserisci il nome'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: prezzo,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Prezzo €',
-                    prefixIcon: Icon(Icons.euro),
-                  ),
-                  validator: (v) {
-                    final value = double.tryParse(
-                      (v ?? '').trim().replaceAll(',', '.'),
-                    );
-
-                    if (value == null || value < 0) {
-                      return 'Inserisci un prezzo valido';
-                    }
-
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: FilledButton.icon(
-                    onPressed: () async {
-                      if (!key.currentState!.validate()) return;
-
-                      final value = double.parse(
-                        prezzo.text.trim().replaceAll(',', '.'),
-                      );
-
-                      if (prodotto == null) {
-                        await DatabaseHelper.instance.insertProdotto(
-                          nome: nome.text.trim(),
-                          prezzo: value,
-                        );
-                      } else {
-                        await DatabaseHelper.instance.updateProdotto(
-                          id: prodotto['id'],
-                          nome: nome.text.trim(),
-                          prezzo: value,
-                        );
-                      }
-
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      await _carica();
-                    },
-                    icon: const Icon(Icons.save),
-                    label: Text(
-                      prodotto == null
-                          ? 'SALVA PRODOTTO'
-                          : 'SALVA MODIFICHE',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Form(
+            key: key,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    prodotto == null
+                        ? 'Nuovo prodotto / servizio'
+                        : 'Modifica prodotto / servizio',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Container(
+                      width: 150,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        color: const Color(0xFFF9DCE7),
+                        border: Border.all(
+                          color: Theme.of(ctx).colorScheme.outlineVariant,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: imagePath != null && File(imagePath!).existsSync()
+                          ? Image.file(
+                              File(imagePath!),
+                              fit: BoxFit.cover,
+                            )
+                          : const Icon(
+                              Icons.image_outlined,
+                              size: 54,
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final selected = await _caricaImmagineJpg();
+                              if (selected != null) {
+                                setSheetState(() {
+                                  imagePath = selected;
+                                  imageChanged = true;
+                                });
+                              }
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Errore caricamento immagine: $e'),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('CARICA JPG'),
+                        ),
+                      ),
+                      if (imagePath != null) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Rimuovi immagine',
+                          onPressed: () => setSheetState(() {
+                            imagePath = null;
+                            imageChanged = true;
+                          }),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Formato supportato: JPG / JPEG',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: nome,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome prodotto / servizio',
+                      prefixIcon: Icon(Icons.inventory_2_outlined),
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? 'Inserisci il nome'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: prezzo,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Prezzo €',
+                      prefixIcon: Icon(Icons.euro),
+                    ),
+                    validator: (v) {
+                      final value = double.tryParse(
+                        (v ?? '').trim().replaceAll(',', '.'),
+                      );
+                      if (value == null || value < 0) {
+                        return 'Inserisci un prezzo valido';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        if (!key.currentState!.validate()) return;
+                        final value = double.parse(
+                          prezzo.text.trim().replaceAll(',', '.'),
+                        );
+                        final savedImage = imageChanged
+                            ? imagePath
+                            : prodotto?['image_path']?.toString();
+
+                        if (prodotto == null) {
+                          await DatabaseHelper.instance.insertProdotto(
+                            nome: nome.text.trim(),
+                            prezzo: value,
+                            imagePath: savedImage,
+                          );
+                        } else {
+                          await DatabaseHelper.instance.updateProdotto(
+                            id: prodotto['id'],
+                            nome: nome.text.trim(),
+                            prezzo: value,
+                            imagePath: savedImage,
+                          );
+                        }
+
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        await _carica();
+                      },
+                      icon: const Icon(Icons.save),
+                      label: Text(
+                        prodotto == null
+                            ? 'SALVA PRODOTTO'
+                            : 'SALVA MODIFICHE',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -3029,7 +3137,6 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
   @override
   Widget build(BuildContext context) {
     final q = _search.text.trim().toLowerCase();
-
     final filtrati = prodotti.where((prodotto) {
       return (prodotto['nome'] ?? '')
           .toString()
@@ -3106,14 +3213,17 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
                             OutlinedButton.icon(
                               onPressed: () => _formProdotto(),
                               icon: const Icon(Icons.add),
-                              label: const Text(
-                                'Aggiungi il primo prodotto',
-                              ),
+                              label: const Text('Aggiungi il primo prodotto'),
                             ),
                         ],
                       ),
                     ),
                   ...filtrati.map((prodotto) {
+                    final path = prodotto['image_path']?.toString();
+                    final hasImage = path != null &&
+                        path.isNotEmpty &&
+                        File(path).existsSync();
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
@@ -3121,9 +3231,19 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
                           horizontal: 14,
                           vertical: 4,
                         ),
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.inventory_2_outlined),
-                        ),
+                        leading: hasImage
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.file(
+                                  File(path!),
+                                  width: 58,
+                                  height: 58,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : const CircleAvatar(
+                                child: Icon(Icons.inventory_2_outlined),
+                              ),
                         title: Text(
                           prodotto['nome'],
                           style: const TextStyle(
@@ -3177,7 +3297,6 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
     );
   }
 }
-
 
 
 class BackupScreen extends StatefulWidget {
