@@ -41,15 +41,19 @@ class PreventiviApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFFF8E1),
+        iconTheme: const IconThemeData(color: Color(0xFFD4AF37)),
+        scaffoldBackgroundColor: Colors.white,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFE48BA8),
-          foregroundColor: Color(0xFF3E3218),
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFFD4AF37),
           elevation: 0,
           centerTitle: true,
         ),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
+          prefixIconColor: Color(0xFFD4AF37),
+          suffixIconColor: Color(0xFFD4AF37),
+          floatingLabelStyle: TextStyle(color: Color(0xFFD4AF37)),
         ),
         cardTheme: const CardThemeData(margin: EdgeInsets.zero),
       ),
@@ -982,8 +986,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: RefreshIndicator(
-        color: const Color(0xFF4A2332),
-        backgroundColor: const Color(0xFFEC91AE),
+        color: const Color(0xFFD4AF37),
+        backgroundColor: Colors.white,
         onRefresh: caricaStatistiche,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -991,38 +995,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             _heroCard(),
             const SizedBox(height: 10),
-            const Text('Gestione', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF4A2332))),
+            const Text('Gestione', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF3A3324))),
             const SizedBox(height: 7),
+            // Gestione e riepilogo sono unificati: ogni voce mostra direttamente il proprio conteggio.
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: _menuTile(Icons.receipt_long_rounded, 'Lista preventivi', 'Visualizza e modifica', () => apri(const ListaPreventiviScreen()))),
+              Expanded(child: _menuTile(Icons.receipt_long_rounded, 'Lista preventivi', 'Visualizza e modifica', preventivi, () => apri(const ListaPreventiviScreen()))),
               const SizedBox(width: 8),
-              Expanded(child: _menuTile(Icons.people_alt_rounded, 'Clienti', 'Gestisci anagrafica', () => apri(const ClientiScreen()))),
-            ]),
-            const SizedBox(height: 7),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: _menuTile(Icons.inventory_2_rounded, 'Prodotti / Servizi', 'Gestisci prodotti e prezzi', () => apri(const ProdottiScreen()))),
-              const SizedBox(width: 8),
-              Expanded(child: _menuTile(Icons.payments_rounded, 'Acconti e scadenze', 'Gestisci gli acconti', () => apri(const AccontiScreen()))),
+              Expanded(child: _menuTile(Icons.people_alt_rounded, 'Clienti', 'Gestisci anagrafica', clienti, () => apri(const ClientiScreen()))),
             ]),
             const SizedBox(height: 7),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: _menuTile(Icons.backup_rounded, 'Backup e dati', 'Esporta e importa', () => apri(const BackupScreen()))),
+              Expanded(child: _menuTile(Icons.inventory_2_rounded, 'Prodotti / Servizi', 'Gestisci prodotti e prezzi', prodotti, () => apri(const ProdottiScreen()))),
               const SizedBox(width: 8),
-              Expanded(child: _menuTile(Icons.notifications_active_rounded, 'Notifiche', 'Avvisi delle scadenze', () => apri(const NotificheScreen()))),
+              Expanded(child: _menuTile(Icons.payments_rounded, 'Acconti e scadenze', 'Gestisci gli acconti', acconti, () => apri(const AccontiScreen()))),
             ]),
-            const SizedBox(height: 10),
-            const Text('Riepilogo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF7A3A52))),
-            const SizedBox(height: 6),
-            Row(children: [
-              Expanded(child: _statCard(Icons.receipt_long_rounded, 'Preventivi', preventivi)),
+            const SizedBox(height: 7),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: _menuTile(Icons.backup_rounded, 'Backup e dati', 'Esporta e importa', null, () => apri(const BackupScreen()))),
               const SizedBox(width: 8),
-              Expanded(child: _statCard(Icons.people_alt_rounded, 'Clienti', clienti)),
-            ]),
-            const SizedBox(height: 6),
-            Row(children: [
-              Expanded(child: _statCard(Icons.inventory_2_rounded, 'Prodotti', prodotti)),
-              const SizedBox(width: 8),
-              Expanded(child: _statCard(Icons.payments_rounded, 'Acconti', acconti)),
+              Expanded(child: _menuTile(Icons.notifications_active_rounded, 'Notifiche', 'Avvisi delle scadenze', null, () => apri(const NotificheScreen()))),
             ]),
           ],
         ),
@@ -1038,10 +1029,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
       child: Container(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xFFF0A8BE), Color(0xFFE48BA8), Color(0xFFC45B7A)],
-          ),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [BoxShadow(blurRadius: 18, offset: Offset(0, 8), color: Color(0x22000000))],
         ),
@@ -1055,16 +1043,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 18),
           const Text('Gestione Preventivi', textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF4A2332), fontSize: 26, fontWeight: FontWeight.w900)),
+            style: TextStyle(color: Color(0xFFD4AF37), fontSize: 26, fontWeight: FontWeight.w900)),
           const SizedBox(height: 5),
           const Text('Crea, salva e condividi i tuoi preventivi.', textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF725C65), fontSize: 14)),
+            style: TextStyle(color: Color(0xFF6B6252), fontSize: 14)),
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity, height: 50,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF9E3F63), foregroundColor: Colors.white,
+                backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               ),
               onPressed: () => apri(const NuovoPreventivoScreen()),
@@ -1077,55 +1065,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _statCard(IconData icon, String label, int value) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeOutCubic,
-      builder: (context, opacity, child) => Opacity(opacity: opacity, child: child),
-      child: Card(
-        elevation: 1, color: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 7),
-          child: Column(children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(color: const Color(0xFFF9DCE7), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, size: 28, color: const Color(0xFF9E3F63)),
-            ),
-            const SizedBox(height: 4),
-            Text(loading ? '…' : '$value',
-              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: Color(0xFF3D2630))),
-            Text(label, style: const TextStyle(color: Color(0xFF725C65))),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _menuTile(IconData icon, String title, String subtitle, VoidCallback onTap) {
+  Widget _menuTile(IconData icon, String title, String subtitle, int? value, VoidCallback onTap) {
     return Card(
-      margin: EdgeInsets.zero, elevation: 1, color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: EdgeInsets.zero,
+      elevation: 1,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFE8D9A5)),
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16), onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 1),
+          padding: const EdgeInsets.symmetric(vertical: 2),
           child: ListTile(
             leading: Container(
               width: 48, height: 48,
-              decoration: BoxDecoration(color: const Color(0xFFF9DCE7), borderRadius: BorderRadius.circular(14)),
-              child: Icon(icon, size: 28, color: const Color(0xFF9E3F63)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBED),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE8D9A5)),
+              ),
+              child: Icon(icon, size: 28, color: const Color(0xFFD4AF37)),
             ),
-            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(subtitle),
-            trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Color(0xFF9E3F63)),
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF332E24))),
+            subtitle: Text(subtitle, style: const TextStyle(color: Color(0xFF6B6252))),
+            trailing: value == null
+                ? const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Color(0xFFD4AF37))
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        loading ? '…' : '$value',
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFD4AF37)),
+                      ),
+                      const Text('totale', style: TextStyle(fontSize: 10, color: Color(0xFF6B6252))),
+                    ],
+                  ),
           ),
         ),
       ),
     );
   }
+
 }
 
 Future<String?> selezionaCliente(BuildContext context) async {
@@ -3402,7 +3385,7 @@ class _ProdottiScreenState extends State<ProdottiScreen> {
                       height: 150,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(18),
-                        color: const Color(0xFFF9DCE7),
+                        color: const Color(0xFFFFFBED),
                         border: Border.all(
                           color: Theme.of(ctx).colorScheme.outlineVariant,
                         ),
