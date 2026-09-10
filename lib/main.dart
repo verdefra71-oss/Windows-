@@ -4260,7 +4260,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                         ),
                         const SizedBox(height: 6),
                         const Text(
-                          'Cerca nell'Annuario CEI per nome e comune.',
+                          "Cerca nell'Annuario CEI per nome e comune.",
                           style: TextStyle(fontSize: 12),
                         ),
                         const SizedBox(height: 10),
