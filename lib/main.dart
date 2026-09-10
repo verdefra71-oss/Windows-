@@ -1947,16 +1947,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Row(
                   children: [
                     Container(
-                      width: 64,
-                      height: 64,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: .20),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
                         Icons.receipt_long_rounded,
                         color: Colors.white,
-                        size: 34,
+                        size: 25,
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -1984,11 +1984,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: _darkGold,
-                        minimumSize: const Size(52, 52),
+                        minimumSize: const Size(42, 42),
                       ),
                       tooltip: 'Nuovo preventivo',
                       onPressed: () => apri(const NuovoPreventivoScreen()),
-                      icon: const Icon(Icons.add_rounded, size: 30),
+                      icon: const Icon(Icons.add_rounded, size: 23),
                     ),
                   ],
                 ),
@@ -2080,13 +2080,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Row(
             children: [
               Container(
-                width: 50,
-                height: 50,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: _cream,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(icon, color: _darkGold, size: 29),
+                child: Icon(icon, color: _darkGold, size: 23),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -2097,7 +2097,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text(
                       loading ? '…' : '$value',
                       style: const TextStyle(
-                        fontSize: 22,
+                        fontSize: 19,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -2132,13 +2132,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 54,
-                height: 54,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: _cream,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, size: 31, color: _darkGold),
+                child: Icon(icon, size: 24, color: _darkGold),
               ),
               const SizedBox(height: 8),
               Text(
