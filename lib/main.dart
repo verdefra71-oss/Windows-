@@ -4560,7 +4560,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Ricerca nell\\'Annuario CEI ufficiale.',
+                      "Ricerca nell'Annuario CEI ufficiale.",
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
