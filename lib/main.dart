@@ -4240,22 +4240,48 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _apriRicercaParrocchiaCEI(
-                      nome: nome,
-                      parrocchia: parrocchia,
-                      parroco: parroco,
-                      telefono: telefono,
-                      email: email,
-                      indirizzo: indirizzo,
-                      partitaIva: partitaIva,
-                      codiceFiscale: codiceFiscale,
-                    ),
-                    icon: const Icon(Icons.travel_explore),
-                    label: const Text(
-                      'CERCA PARROCCHIA SU CHIESACATTOLICA.IT',
+                Card(
+                  elevation: 0,
+                  margin: EdgeInsets.zero,
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.travel_explore),
+                            SizedBox(width: 8),
+                            Text(
+                              'RICERCA PARROCCHIA ONLINE',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Cerca nell'Annuario CEI per nome e comune.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () => _apriRicercaParrocchiaCEI(
+                              nome: nome,
+                              parrocchia: parrocchia,
+                              parroco: parroco,
+                              telefono: telefono,
+                              email: email,
+                              indirizzo: indirizzo,
+                              partitaIva: partitaIva,
+                              codiceFiscale: codiceFiscale,
+                            ),
+                            icon: const Icon(Icons.search),
+                            label: const Text('CERCA PARROCCHIA'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -4448,56 +4474,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Il comune è facoltativo, ma aiuta a trovare la parrocchia corretta.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('ANNULLA'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.search),
-            label: const Text('CERCA'),
-          ),
-        ],
-      ),
-    );
-
-    final qNome = ricercaNome.text.trim();
-    final qComune = ricercaComune.text.trim();
-    ricercaNome.dispose();
-    ricercaComune.dispose();
-
-    if (avvia != true) return;
-    if (qNome.isEmpty && qComune.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Inserisci il nome della parrocchia oppure il comune.')),
-        );
-      }
-      return;
-    }
-
-    await _cercaParrocchiaCEI(
-      queryNome: qNome,
-      queryComune: qComune,
-      nome: nome,
-      parrocchia: parrocchia,
-      parroco: parroco,
-      telefono: telefono,
-      email: email,
-      indirizzo: indirizzo,
-      partitaIva: partitaIva,
-      codiceFiscale: codiceFiscale,
-    );
-  }
-
-  Future<void> _cercaParrocchiaCEI({
+                  style: TextStyle(fontSize:   Future<void> _cercaParrocchiaCEI({
     required String queryNome,
     required String queryComune,
     required TextEditingController nome,
@@ -4526,7 +4503,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
     try {
       String normalizza(String value) => value
           .toUpperCase()
-          .replaceAll(RegExp(r"[\\.,'’]"), ' ')
+          .replaceAll(RegExp(r"[\.,'’]"), ' ')
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
 
@@ -4598,14 +4575,14 @@ class _ClientiScreenState extends State<ClientiScreen> {
           }
 
           final parrocoMatch = RegExp(
-            r'(?:Parroco|Amministratore parrocchiale|Parroco in solidum moderatore):\\s*(.*?)(?=\\s+(?:BeWeb|Orari Messe|Diocesi|Numero di abitanti)|$)',
+            r'(?:Parroco|Amministratore parrocchiale|Parroco in solidum moderatore):\s*(.*?)(?=\s+(?:BeWeb|Orari Messe|Diocesi|Numero di abitanti)|$)',
             caseSensitive: false,
           ).firstMatch(resto);
           final parrocoTrovato = parrocoMatch?.group(1)?.trim() ?? '';
 
           var indirizzoTrovato = resto;
           final abitantiMatch = RegExp(
-            r'\\s+Numero di abitanti:.*?(?=\\s+(?:Parroco|Amministratore parrocchiale|Parroco in solidum moderatore):|$)',
+            r'\s+Numero di abitanti:.*?(?=\\s+(?:Parroco|Amministratore parrocchiale|Parroco in solidum moderatore):|$)',
             caseSensitive: false,
           ).firstMatch(indirizzoTrovato);
           if (abitantiMatch != null) {
@@ -4615,7 +4592,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
             indirizzoTrovato = indirizzoTrovato.substring(0, parrocoMatch.start).trim();
           }
           indirizzoTrovato = indirizzoTrovato
-              .replaceAll(RegExp(r'\\s+(?:BeWeb|Orari Messe|Diocesi.*)$', caseSensitive: false), '')
+              .replaceAll(RegExp(r'\s+(?:BeWeb|Orari Messe|Diocesi.*)$', caseSensitive: false), '')
               .trim();
 
           // Accettiamo solo schede che corrispondono davvero ai filtri inseriti.
@@ -4670,6 +4647,37 @@ class _ClientiScreenState extends State<ClientiScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (_, index) {
                 final r = lista[index];
+                return ListTile(
+                  leading: const Icon(Icons.church, color: Colors.amber),
+                  title: Text(r['nome'] ?? ''),
+                  subtitle: Text([
+                    if ((r['indirizzo'] ?? '').isNotEmpty) r['indirizzo']!,
+                    if ((r['parroco'] ?? '').isNotEmpty) r['parroco']!,
+                  ].join('\\n')),
+                  isThreeLine: (r['parroco'] ?? '').isNotEmpty,
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    nome.text = r['nome'] ?? '';
+                    parrocchia.text = r['nome'] ?? '';
+                    indirizzo.text = r['indirizzo'] ?? '';
+                    parroco.text = r['parroco'] ?? '';
+                    Navigator.of(dialogContext).pop();
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore durante la ricerca CEI: $e')),
+      );
+    }
+  }
+   final r = lista[index];
                 return ListTile(
                   leading: const Icon(Icons.church, color: Colors.amber),
                   title: Text(r['nome'] ?? ''),
