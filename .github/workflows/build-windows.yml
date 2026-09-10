@@ -48,10 +48,40 @@ jobs:
         shell: pwsh
         run: flutter analyze --no-fatal-infos
 
+      - name: Configure Visual Studio 2022 environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          vsversion: 2022
+
+      - name: Clean Windows generated files
+        working-directory: ${{ env.APP_DIR }}
+        shell: pwsh
+        run: |
+          if (Test-Path 'build') { Remove-Item -Recurse -Force 'build' }
+          if (Test-Path 'windows') { Remove-Item -Recurse -Force 'windows' }
+          Remove-Item Env:CMAKE_GENERATOR -ErrorAction SilentlyContinue
+          Remove-Item Env:CMAKE_GENERATOR_PLATFORM -ErrorAction SilentlyContinue
+          Remove-Item Env:VisualStudioVersion -ErrorAction SilentlyContinue
+          flutter create --platforms=windows --project-name preventivi_app .
+          flutter pub get
+
+      - name: Verify Visual Studio 2022 and CMake
+        shell: pwsh
+        run: |
+          Write-Host "Visual Studio installations:"
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          Write-Host "CMake:"
+          cmake --version
+
       - name: Build Windows release
         working-directory: ${{ env.APP_DIR }}
         shell: pwsh
-        run: flutter build windows --release
+        run: |
+          $env:CMAKE_GENERATOR = 'Visual Studio 17 2022'
+          $env:CMAKE_GENERATOR_PLATFORM = 'x64'
+          $env:CMAKE_GENERATOR_TOOLSET = 'host=x64'
+          flutter build windows --release -v
 
       - name: Create portable ZIP
         shell: pwsh
