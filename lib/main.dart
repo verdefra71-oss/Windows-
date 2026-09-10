@@ -4524,79 +4524,122 @@ class _ClientiScreenState extends State<ClientiScreen> {
     );
 
     try {
-      final params = <String, String>{
-        'nome': queryNome,
-        'comune': queryComune,
-        'pagina': '1',
-      };
-      params.removeWhere((key, value) => value.isEmpty);
+      String normalizza(String value) => value
+          .toUpperCase()
+          .replaceAll(RegExp(r'[\\.,\'’]'), ' ')
+          .replaceAll(RegExp(r'\\s+'), ' ')
+          .trim();
 
-      final uri = Uri.https(
-        'www.chiesacattolica.it',
-        '/annuario-cei/ricerca-parrocchie/',
-        params,
-      );
-
-      final response = await http.get(uri, headers: const {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-      }).timeout(const Duration(seconds: 20));
-
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
-      if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}');
-      }
-
-      final document = html_parser.parse(response.body);
+      final nomeRicerca = normalizza(queryNome);
+      final comuneRicerca = normalizza(queryComune);
       final risultati = <Map<String, String>>[];
 
-      for (final heading in document.querySelectorAll('h4')) {
-        final nomeParrocchia = heading.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-        if (nomeParrocchia.isEmpty) continue;
+      // Il sito CEI ha cambiato più volte i nomi dei parametri della ricerca.
+      // Proviamo sia la nomenclatura attuale (denominazione) sia quella usata
+      // dall'Annuario CEI in alcune versioni (nome).
+      final richieste = <Map<String, String>>[
+        {
+          if (queryNome.trim().isNotEmpty) 'denominazione': queryNome.trim(),
+          if (queryComune.trim().isNotEmpty) 'comune': queryComune.trim(),
+          'pagina': '1',
+        },
+        {
+          if (queryNome.trim().isNotEmpty) 'nome': queryNome.trim(),
+          if (queryComune.trim().isNotEmpty) 'comune': queryComune.trim(),
+          'pagina': '1',
+        },
+        if (queryComune.trim().isNotEmpty)
+          {
+            'comune': queryComune.trim(),
+            'pagina': '1',
+          },
+      ];
 
-        var node = heading.parent;
-        var blocco = '';
-        for (var i = 0; i < 8 && node != null; i++) {
-          final testo = node.text.trim().replaceAll(RegExp(r'\s+'), ' ');
-          if (testo.length > blocco.length) blocco = testo;
-          if (testo.contains('Numero di abitanti') ||
-              testo.contains('Parroco:') ||
-              testo.contains('Amministratore parrocchiale:')) {
-            break;
+      for (final params in richieste) {
+        final uri = Uri.https(
+          'www.chiesacattolica.it',
+          '/annuario-cei/ricerca-parrocchie/',
+          params,
+        );
+
+        final response = await http.get(uri, headers: const {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'it-IT,it;q=0.9',
+        }).timeout(const Duration(seconds: 20));
+
+        if (response.statusCode != 200) continue;
+
+        final document = html_parser.parse(response.body);
+        final headings = document.querySelectorAll('h4, h3');
+
+        for (final heading in headings) {
+          final nomeParrocchia = heading.text.trim().replaceAll(RegExp(r'\\s+'), ' ');
+          if (nomeParrocchia.isEmpty) continue;
+
+          // Risaliamo al contenitore della singola scheda CEI.
+          var node = heading.parent;
+          String blocco = '';
+          for (var i = 0; i < 10 && node != null; i++) {
+            final testo = node.text.trim().replaceAll(RegExp(r'\\s+'), ' ');
+            if (testo.length > blocco.length) blocco = testo;
+            if (testo.contains('Numero di abitanti') ||
+                testo.contains('Parroco:') ||
+                testo.contains('Amministratore parrocchiale:')) {
+              break;
+            }
+            node = node.parent;
           }
-          node = node.parent;
+
+          var resto = blocco;
+          final posizione = resto.toUpperCase().indexOf(nomeParrocchia.toUpperCase());
+          if (posizione >= 0) {
+            resto = resto.substring(posizione + nomeParrocchia.length).trim();
+          }
+
+          final parrocoMatch = RegExp(
+            r'(?:Parroco|Amministratore parrocchiale|Parroco in solidum moderatore):\\s*(.*?)(?=\\s+(?:BeWeb|Orari Messe|Diocesi|Numero di abitanti)|$)',
+            caseSensitive: false,
+          ).firstMatch(resto);
+          final parrocoTrovato = parrocoMatch?.group(1)?.trim() ?? '';
+
+          var indirizzoTrovato = resto;
+          final abitantiMatch = RegExp(
+            r'\\s+Numero di abitanti:.*?(?=\\s+(?:Parroco|Amministratore parrocchiale|Parroco in solidum moderatore):|$)',
+            caseSensitive: false,
+          ).firstMatch(indirizzoTrovato);
+          if (abitantiMatch != null) {
+            indirizzoTrovato = indirizzoTrovato.substring(0, abitantiMatch.start).trim();
+          }
+          if (parrocoMatch != null) {
+            indirizzoTrovato = indirizzoTrovato.substring(0, parrocoMatch.start).trim();
+          }
+          indirizzoTrovato = indirizzoTrovato
+              .replaceAll(RegExp(r'\\s+(?:BeWeb|Orari Messe|Diocesi.*)$', caseSensitive: false), '')
+              .trim();
+
+          // Accettiamo solo schede che corrispondono davvero ai filtri inseriti.
+          final testoScheda = normalizza('$nomeParrocchia $indirizzoTrovato');
+          if (nomeRicerca.isNotEmpty &&
+              !normalizza(nomeParrocchia).contains(nomeRicerca) &&
+              !testoScheda.contains(nomeRicerca)) {
+            continue;
+          }
+          if (comuneRicerca.isNotEmpty && !testoScheda.contains(comuneRicerca)) {
+            continue;
+          }
+
+          risultati.add({
+            'nome': nomeParrocchia,
+            'indirizzo': indirizzoTrovato,
+            'parroco': parrocoTrovato,
+          });
         }
 
-        final posizione = blocco.indexOf(nomeParrocchia);
-        if (posizione >= 0) {
-          blocco = blocco.substring(posizione + nomeParrocchia.length).trim();
-        }
-
-        final parrocoMatch = RegExp(
-          r'(?:Parroco|Amministratore parrocchiale):\s*(.*?)(?=\s+(?:BeWeb|Orari Messe|Diocesi|Numero di abitanti)|$)',
-          caseSensitive: false,
-        ).firstMatch(blocco);
-        final parrocoTrovato = parrocoMatch?.group(1)?.trim() ?? '';
-
-        var indirizzoTrovato = blocco;
-        final abitantiMatch = RegExp(
-          r'\s+Numero di abitanti:.*?(?=\s+(?:Parroco|Amministratore parrocchiale):|$)',
-          caseSensitive: false,
-        ).firstMatch(indirizzoTrovato);
-        if (abitantiMatch != null) {
-          indirizzoTrovato = indirizzoTrovato.substring(0, abitantiMatch.start).trim();
-        }
-        if (parrocoMatch != null) {
-          indirizzoTrovato = indirizzoTrovato.substring(0, parrocoMatch.start).trim();
-        }
-        if (indirizzoTrovato == nomeParrocchia) indirizzoTrovato = '';
-
-        risultati.add({
-          'nome': nomeParrocchia,
-          'indirizzo': indirizzoTrovato,
-          'parroco': parrocoTrovato,
-        });
+        if (risultati.isNotEmpty) break;
       }
+
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
 
       final unici = <String, Map<String, String>>{};
       for (final r in risultati) {
@@ -4609,7 +4652,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
       if (lista.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Nessuna parrocchia trovata. Prova con un nome più semplice oppure aggiungi il comune.'),
+            content: Text('Nessuna parrocchia trovata. Prova con il solo Comune oppure con parte del nome della parrocchia.'),
           ),
         );
         return;
@@ -4628,19 +4671,12 @@ class _ClientiScreenState extends State<ClientiScreen> {
               itemBuilder: (_, index) {
                 final r = lista[index];
                 return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                  leading: const CircleAvatar(child: Icon(Icons.church_outlined)),
-                  title: Text(
-                    r['nome'] ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text([
-                      if ((r['indirizzo'] ?? '').isNotEmpty) r['indirizzo']!,
-                      if ((r['parroco'] ?? '').isNotEmpty) 'Parroco: ${r['parroco']!}',
-                    ].join('\n')),
-                  ),
+                  leading: const Icon(Icons.church, color: Colors.amber),
+                  title: Text(r['nome'] ?? ''),
+                  subtitle: Text([
+                    if ((r['indirizzo'] ?? '').isNotEmpty) r['indirizzo']!,
+                    if ((r['parroco'] ?? '').isNotEmpty) r['parroco']!,
+                  ].join('\\n')),
                   isThreeLine: (r['parroco'] ?? '').isNotEmpty,
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
@@ -4648,27 +4684,20 @@ class _ClientiScreenState extends State<ClientiScreen> {
                     parrocchia.text = r['nome'] ?? '';
                     indirizzo.text = r['indirizzo'] ?? '';
                     parroco.text = r['parroco'] ?? '';
-                    Navigator.pop(dialogContext);
+                    Navigator.of(dialogContext).pop();
                   },
                 );
               },
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('ANNULLA'),
-            ),
-          ],
         ),
       );
     } catch (e) {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).maybePop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore durante la ricerca CEI: $e')),
-        );
-      }
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore durante la ricerca CEI: $e')),
+      );
     }
   }
 
