@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -734,10 +733,18 @@ CREATE TABLE fatture (
       await txn.delete('prodotti');
       await txn.delete('clienti');
       await txn.delete('fatture');
-      for (final row in clienti) await txn.insert('clienti', row);
-      for (final row in prodotti) await txn.insert('prodotti', row);
-      for (final row in preventivi) await txn.insert('preventivi', row);
-      for (final row in fatture) await txn.insert('fatture', row);
+      for (final row in clienti) {
+        await txn.insert('clienti', row);
+      }
+      for (final row in prodotti) {
+        await txn.insert('prodotti', row);
+      }
+      for (final row in preventivi) {
+        await txn.insert('preventivi', row);
+      }
+      for (final row in fatture) {
+        await txn.insert('fatture', row);
+      }
     });
     await createAutomaticBackup();
   }
@@ -1574,7 +1581,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: pagamento,
+                    initialValue: pagamento,
                     decoration: const InputDecoration(
                       labelText: 'Pagamento',
                       prefixIcon: Icon(Icons.account_balance_wallet_outlined),
@@ -2552,7 +2559,7 @@ Future<void> aggiungiAcconto() async {
       );
       final pagatoEffettivo = pagato || (totale - totaleAcconti <= 0.005);
 
-      final id = await db.insertPreventivo(
+      await db.insertPreventivo(
         numero: numero,
         cliente: cliente,
         totale: totale,
