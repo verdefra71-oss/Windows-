@@ -29,9 +29,15 @@ void main() async {
     databaseFactory = sqflite_ffi.databaseFactoryFfi;
   }
 
-  await NotificationService.instance.initialize();
+  // Le notifiche locali sono usate su Android/iOS/macOS.
+  // Su Windows/Linux le saltiamo per evitare che il plugin blocchi l'avvio.
+  if (!Platform.isWindows && !Platform.isLinux) {
+    await NotificationService.instance.initialize();
+  }
   await DatabaseHelper.instance.createAutomaticBackup();
-  await NotificationService.instance.refreshMonthlyReminder();
+  if (!Platform.isWindows && !Platform.isLinux) {
+    await NotificationService.instance.refreshMonthlyReminder();
+  }
   runApp(const PreventiviApp());
 }
 
@@ -103,6 +109,7 @@ class NotificationService {
   static const _notificationId = 7001;
 
   Future<void> initialize() async {
+    if (Platform.isWindows || Platform.isLinux) return;
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Europe/Rome'));
 
@@ -118,6 +125,7 @@ class NotificationService {
   }
 
   Future<bool> requestPermission() async {
+    if (Platform.isWindows || Platform.isLinux) return false;
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     final granted = await android?.requestNotificationsPermission();
@@ -133,6 +141,8 @@ class NotificationService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enabledKey, enabled);
 
+    if (Platform.isWindows || Platform.isLinux) return;
+
     if (!enabled) {
       await _plugin.cancel(_notificationId);
       return;
@@ -143,6 +153,7 @@ class NotificationService {
   }
 
   Future<void> refreshMonthlyReminder() async {
+    if (Platform.isWindows || Platform.isLinux) return;
     if (!await isEnabled()) return;
 
     final saldi = await DatabaseHelper.instance.getPreventiviDaSaldare();
