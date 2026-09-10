@@ -58,21 +58,22 @@ class PreventiviApp extends StatelessWidget {
           primary: const Color(0xFF9A7000),
           onPrimary: Colors.white,
           secondary: const Color(0xFFD4AF37),
-          surface: Colors.white,
+          surface: const Color(0xFFFFFDF7),
           onSurface: const Color(0xFF222222),
         ),
-        scaffoldBackgroundColor: Colors.white,
+        scaffoldBackgroundColor: const Color(0xFFFFFDF7),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.white,
+          backgroundColor: Color(0xFFFFFBF0),
+          foregroundColor: Color(0xFF6F5200),
           elevation: 0,
+          shadowColor: Colors.transparent,
           centerTitle: true,
         ),
         cardTheme: const CardThemeData(
           margin: EdgeInsets.zero,
           elevation: 1.5,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(16)),
+            borderRadius: BorderRadius.all(Radius.circular(12)),
           ),
         ),
         inputDecorationTheme: const InputDecorationTheme(
@@ -88,7 +89,7 @@ class PreventiviApp extends StatelessWidget {
             foregroundColor: Colors.white,
             minimumSize: const Size(0, 48),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
           ),
         ),
@@ -1756,7 +1757,7 @@ class _ListaFattureScreenState extends State<ListaFattureScreen> {
               Row(children: [
                 const CircleAvatar(child: Icon(Icons.receipt_long)),
                 const SizedBox(width: 12),
-                Expanded(child: Text((f['numero'] ?? '').toString(), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold))),
+                Expanded(child: Text((f['numero'] ?? '').toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
                 IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
               ]),
               const Divider(height: 24),
@@ -1942,21 +1943,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Azione principale sempre immediatamente disponibile.
             Card(
               color: _gold,
+              elevation: 2,
+              shadowColor: const Color(0x33000000),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                padding: const EdgeInsets.fromLTRB(17, 14, 14, 14),
                 child: Row(
                   children: [
                     Container(
-                      width: 48,
-                      height: 48,
+                      width: 132,
+                      height: 58,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .20),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.receipt_long_rounded,
                         color: Colors.white,
-                        size: 25,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Image.asset(
+                        'assets/logo.png',
+                        fit: BoxFit.contain,
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -1968,7 +1971,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             'Gestione Preventivi',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 21,
+                              fontSize: 20,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -1994,15 +1997,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
 
-            const Padding(
-              padding: EdgeInsets.only(left: 2, bottom: 8),
-              child: Text(
-                'Riepilogo e accesso rapido',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-            ),
+            _sectionHeader('GESTIONE', Icons.dashboard_customize_rounded, true),
+            const SizedBox(height: 9),
             LayoutBuilder(
               builder: (context, constraints) {
                 final wide = constraints.maxWidth >= 800;
@@ -2014,51 +2012,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisSpacing: 10,
                   childAspectRatio: wide ? 2.35 : 1.38,
                   children: [
-                _statCard(
-                  Icons.receipt_long_rounded,
-                  'Preventivi',
-                  preventivi,
-                  () => apri(const ListaPreventiviScreen()),
-                ),
-                _statCard(
-                  Icons.receipt_long_rounded,
-                  'Fatture',
-                  fatture,
-                  () => apri(const ListaFattureScreen()),
-                ),
-                _statCard(
-                  Icons.people_alt_rounded,
-                  'Clienti',
-                  clienti,
-                  () => apri(const ClientiScreen()),
-                ),
-                _statCard(
-                  Icons.inventory_2_rounded,
-                  'Prodotti / Servizi',
-                  prodotti,
-                  () => apri(const ProdottiScreen()),
-                ),
-                _statCard(
-                  Icons.payments_rounded,
-                  'Acconti',
-                  acconti,
-                  () => apri(const AccontiScreen()),
-                ),
-                _actionCard(
-                  Icons.request_quote_rounded,
-                  'Crea fattura',
-                  () => apri(const CreaFatturaScreen()),
-                ),
-                _actionCard(
-                  Icons.backup_rounded,
-                  'Backup e dati',
-                  () => apri(const BackupScreen()),
-                ),
-                _actionCard(
-                  Icons.notifications_active_rounded,
-                  'Notifiche',
-                  () => apri(const NotificheScreen()),
-                ),
+                    _statCard(Icons.receipt_long_rounded, 'Preventivi', preventivi, () => apri(const ListaPreventiviScreen())),
+                    _statCard(Icons.receipt_long_rounded, 'Fatture', fatture, () => apri(const ListaFattureScreen())),
+                    _statCard(Icons.people_alt_rounded, 'Clienti', clienti, () => apri(const ClientiScreen())),
+                    _statCard(Icons.inventory_2_rounded, 'Prodotti / Servizi', prodotti, () => apri(const ProdottiScreen())),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 18),
+            _sectionHeader('RIEPILOGO', Icons.insights_rounded, false),
+            const SizedBox(height: 9),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 800;
+                return GridView.count(
+                  crossAxisCount: wide ? 4 : 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: wide ? 2.35 : 1.38,
+                  children: [
+                    _statCard(Icons.payments_rounded, 'Acconti', acconti, () => apri(const AccontiScreen())),
+                    _actionCard(Icons.request_quote_rounded, 'Crea fattura', () => apri(const CreaFatturaScreen())),
+                    _actionCard(Icons.backup_rounded, 'Backup e dati', () => apri(const BackupScreen())),
+                    _actionCard(Icons.notifications_active_rounded, 'Notifiche', () => apri(const NotificheScreen())),
                   ],
                 );
               },
@@ -2069,6 +2048,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _sectionHeader(String title, IconData icon, bool primary) {
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: primary ? _gold : _cream,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 19, color: primary ? Colors.white : _darkGold),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: primary ? 17 : 15,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.1,
+            color: primary ? _darkGold : const Color(0xFF6D6455),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(height: 1, color: primary ? const Color(0xFFE4CF96) : const Color(0xFFE9E3D7)),
+        ),
+      ],
+    );
+  }
+
   Widget _statCard(
     IconData icon,
     String label,
@@ -2076,8 +2085,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     VoidCallback onTap,
   ) {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFFFFFFFF),
       clipBehavior: Clip.antiAlias,
+      shadowColor: const Color(0x18000000),
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -2089,7 +2099,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 height: 42,
                 decoration: BoxDecoration(
                   color: _cream,
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: _darkGold, size: 23),
               ),
@@ -2127,8 +2137,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _actionCard(IconData icon, String title, VoidCallback onTap) {
     return Card(
-      color: Colors.white,
+      color: const Color(0xFFFFFFFF),
       clipBehavior: Clip.antiAlias,
+      shadowColor: const Color(0x18000000),
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -2141,7 +2152,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 height: 44,
                 decoration: BoxDecoration(
                   color: _cream,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, size: 24, color: _darkGold),
               ),
