@@ -4526,8 +4526,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
     try {
       String normalizza(String value) => value
           .toUpperCase()
-          .replaceAll(RegExp(r'[\\.,\'’]'), ' ')
-          .replaceAll(RegExp(r'\\s+'), ' ')
+          .replaceAll(RegExp(r"[\\.,'’]"), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
 
       final nomeRicerca = normalizza(queryNome);
@@ -4574,14 +4574,14 @@ class _ClientiScreenState extends State<ClientiScreen> {
         final headings = document.querySelectorAll('h4, h3');
 
         for (final heading in headings) {
-          final nomeParrocchia = heading.text.trim().replaceAll(RegExp(r'\\s+'), ' ');
+          final nomeParrocchia = heading.text.trim().replaceAll(RegExp(r'\s+'), ' ');
           if (nomeParrocchia.isEmpty) continue;
 
           // Risaliamo al contenitore della singola scheda CEI.
           var node = heading.parent;
           String blocco = '';
           for (var i = 0; i < 10 && node != null; i++) {
-            final testo = node.text.trim().replaceAll(RegExp(r'\\s+'), ' ');
+            final testo = node.text.trim().replaceAll(RegExp(r'\s+'), ' ');
             if (testo.length > blocco.length) blocco = testo;
             if (testo.contains('Numero di abitanti') ||
                 testo.contains('Parroco:') ||
