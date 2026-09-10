@@ -4412,6 +4412,300 @@ class _ClientiScreenState extends State<ClientiScreen> {
       final nomeRicerca = ricerca.text.trim();
       final comuneRicerca = comune.text.trim();
 
+      if (nomeRicerca.isEmpty && comuneRicerca.isEmpty) {
+        return;
+      }
+
+      setModal(() => cerca = true);
+      risultati = [];
+
+      try {
+        // ATTENZIONE: il sito CEI usa "nome" per il filtro
+        // della denominazione della parrocchia. "denominazione"
+        // non è il parametro utilizzato dalla pagina attuale.
+        final url = Uri.https(
+          'www.chiesacattolica.it',
+          '/annuario-cei/ricerca-parrocchie/',
+          {
+            if (nomeRicerca.isNotEmpty) 'nome': nomeRicerca,
+            if (comuneRicerca.isNotEmpty) 'comune': comuneRicerca,
+          },
+        );
+
+        final response = await http.get(
+          url,
+          headers: const {
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 Chrome/140 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'it-IT,it;q=0.9',
+          },
+        ).timeout(const Duration(seconds: 20));
+
+        if (response.statusCode != 200) {
+          throw Exception('CEI HTTP ${response.statusCode}');
+        }
+
+        final document = html_parser.parse(response.body);
+        final queryTokens = <String>[nomeRicerca, comuneRicerca]
+            .where((e) => e.isNotEmpty)
+            .map((e) => e
+                .toLowerCase()
+                .replaceAll(RegExp(r'[^a-zàèéìòù0-9 ]'), ' ')
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+
+        String normalize(String value) => value
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-zàèéìòù0-9 ]'), ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+
+        // Nella pagina CEI i risultati possono essere contenuti in
+        // H2/H3/H4 a seconda della versione del sito. Risaliamo quindi
+        // alcuni livelli del DOM invece di dipendere da un solo parent.
+        final headings = document.querySelectorAll('h2, h3, h4');
+
+        for (final heading in headings) {
+          final titolo = heading.text.trim();
+          if (titolo.isEmpty || titolo.length < 2) continue;
+
+          final titoloNorm = normalize(titolo);
+          final blocchi = <String>[];
+
+          var node = heading.parent;
+          for (var livello = 0; livello < 7 && node != null; livello++) {
+            final testo = node.text.trim();
+            if (testo.length >= 30 && testo.length <= 2500) {
+              blocchi.add(testo);
+            }
+            node = node.parent;
+          }
+
+          String? testoRisultato;
+          for (final blocco in blocchi) {
+            final norm = normalize(blocco);
+            final haDati = RegExp(r'\b\d{5}\b').hasMatch(blocco) ||
+                RegExp(
+                  r'\b(Parroco|Amministratore parrocchiale|Vicario parrocchiale|Parroco in solidum)\b',
+                  caseSensitive: false,
+                ).hasMatch(blocco);
+            final contieneTitolo = norm.contains(titoloNorm);
+            if (haDati && contieneTitolo) {
+              testoRisultato = blocco;
+              break;
+            }
+          }
+
+          if (testoRisultato == null) continue;
+
+          final normRisultato = normalize(testoRisultato);
+          if (queryTokens.isNotEmpty &&
+              !queryTokens.every((token) => normRisultato.contains(token))) {
+            continue;
+          }
+
+          final righe = testoRisultato
+              .split(RegExp(r'\n+'))
+              .map((r) => r.trim())
+              .where((r) => r.isNotEmpty)
+              .toList();
+
+          String indirizzoRisultato = '';
+          String parrocoRisultato = '';
+
+          for (final riga in righe) {
+            if (RegExp(r'\b\d{5}\b').hasMatch(riga)) {
+              indirizzoRisultato = riga;
+              break;
+            }
+          }
+
+          final matchParroco = RegExp(
+            r'((?:Parroco|Amministratore parrocchiale|Vicario parrocchiale|Parroco in solidum)\s*:\s*[^\n]+)',
+            caseSensitive: false,
+          ).firstMatch(testoRisultato);
+          if (matchParroco != null) {
+            parrocoRisultato = matchParroco.group(1)!.trim();
+          }
+
+          if (risultati.any((r) =>
+              normalize(r['nome'] ?? '') == titoloNorm &&
+              normalize(r['indirizzo'] ?? '') == normalize(indirizzoRisultato))) {
+            continue;
+          }
+
+          risultati.add({
+            'nome': titolo,
+            'indirizzo': indirizzoRisultato,
+            'parroco': parrocoRisultato,
+            'fonte': 'Annuario CEI - Chiesacattolica.it',
+          });
+
+          if (risultati.length >= 30) break;
+        }
+
+        setModal(() {});
+      } catch (_) {
+        risultati = [];
+        setModal(() {});
+      } finally {
+        setModal(() => cerca = false);
+      }
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.church_outlined),
+              SizedBox(width: 10),
+              Expanded(child: Text('Cerca parrocchia')),
+            ],
+          ),
+          content: SizedBox(
+            width: 650,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      "Ricerca nell'Annuario CEI ufficiale.",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: ricerca,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.words,
+                    onSubmitted: (_) => eseguiRicerca(setModal),
+                    decoration: const InputDecoration(
+                      labelText: 'Nome della parrocchia / chiesa',
+                      hintText: 'Es. San Gennaro',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: comune,
+                    textCapitalization: TextCapitalization.words,
+                    onSubmitted: (_) => eseguiRicerca(setModal),
+                    decoration: const InputDecoration(
+                      labelText: 'Comune (facoltativo)',
+                      hintText: 'Es. Napoli',
+                      prefixIcon: Icon(Icons.location_city_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: cerca ? null : () => eseguiRicerca(setModal),
+                      icon: cerca
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.travel_explore),
+                      label: Text(
+                        cerca ? 'RICERCA IN CORSO...' : 'CERCA SUL SITO CEI',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  if (!cerca && risultati.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Nessun risultato. Prova con il nome della chiesa e, se possibile, il comune.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ...risultati.map(
+                    (r) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: const CircleAvatar(child: Icon(Icons.church)),
+                        title: Text(
+                          r['nome'] ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Text(
+                            [
+                              if ((r['indirizzo'] ?? '').isNotEmpty) r['indirizzo']!,
+                              if ((r['parroco'] ?? '').isNotEmpty) r['parroco']!,
+                            ].join('\n'),
+                          ),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () {
+                          nome.text = r['nome'] ?? '';
+                          parrocchia.text = r['nome'] ?? '';
+                          parroco.text = r['parroco'] ?? '';
+                          indirizzo.text = r['indirizzo'] ?? '';
+                          Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  (r['parroco'] ?? '').isEmpty
+                                      ? 'Dati della parrocchia importati.'
+                                      : 'Importati parrocchia, indirizzo e ${r['parroco']}',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  if (risultati.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Fonte: Annuario CEI / Chiesacattolica.it. I dati vengono riportati solo quando pubblicati dalla fonte.',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('CHIUDI'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    ricerca.dispose();
+    comune.dispose();
+  }) async {
+    final ricerca = TextEditingController();
+    final comune = TextEditingController();
+    bool cerca = false;
+    List<Map<String, String>> risultati = [];
+
+    Future<void> eseguiRicerca(StateSetter setModal) async {
+      final nomeRicerca = ricerca.text.trim();
+      final comuneRicerca = comune.text.trim();
+
       if (nomeRicerca.isEmpty && comuneRicerca.isEmpty) return;
 
       setModal(() => cerca = true);
