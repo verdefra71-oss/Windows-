@@ -4402,6 +4402,150 @@ class _ClientiScreenState extends State<ClientiScreen> {
     required TextEditingController indirizzo,
     required TextEditingController partitaIva,
     required TextEditingController codiceFiscale,
+  }) async {
+    final query = nome.text.trim();
+    if (query.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inserisci prima il nome della parrocchia o della chiesa.')),
+      );
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 18),
+            Expanded(child: Text("Ricerca nell'Annuario CEI...")),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final uri = Uri.https(
+        'www.chiesacattolica.it',
+        '/annuario-cei/ricerca-parrocchie/',
+        {'nome': query, 'pagina': '1'},
+      );
+
+      final response = await http.get(uri, headers: const {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+      }).timeout(const Duration(seconds: 20));
+
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
+
+      final document = html_parser.parse(response.body);
+      final risultati = <Map<String, String>>[];
+
+      for (final heading in document.querySelectorAll('h4')) {
+        final nomeParrocchia = heading.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+        if (nomeParrocchia.isEmpty) continue;
+
+        var node = heading.parent;
+        var blocco = '';
+        for (var i = 0; i < 6 && node != null; i++) {
+          final testo = node.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+          if (testo.length > blocco.length) blocco = testo;
+          if (testo.contains('Numero di abitanti') || testo.contains('Parroco:') || testo.contains('Amministratore parrocchiale:')) break;
+          node = node.parent;
+        }
+
+        final posizione = blocco.indexOf(nomeParrocchia);
+        if (posizione >= 0) blocco = blocco.substring(posizione + nomeParrocchia.length).trim();
+
+        final parrocoMatch = RegExp(
+          r'(?:Parroco|Amministratore parrocchiale):\s*(.*?)(?=\s+(?:BeWeb|Orari Messe|Diocesi)|$)',
+          caseSensitive: false,
+        ).firstMatch(blocco);
+        final parrocoTrovato = parrocoMatch?.group(1)?.trim() ?? '';
+
+        var indirizzoTrovato = blocco;
+        final abitantiMatch = RegExp(
+          r'\s+Numero di abitanti:.*?(?=\s+(?:Parroco|Amministratore parrocchiale):|$)',
+          caseSensitive: false,
+        ).firstMatch(indirizzoTrovato);
+        if (abitantiMatch != null) {
+          indirizzoTrovato = indirizzoTrovato.substring(0, abitantiMatch.start).trim();
+        }
+        if (parrocoMatch != null) {
+          indirizzoTrovato = indirizzoTrovato.substring(0, parrocoMatch.start).trim();
+        }
+        if (indirizzoTrovato == nomeParrocchia) indirizzoTrovato = '';
+
+        risultati.add({
+          'nome': nomeParrocchia,
+          'indirizzo': indirizzoTrovato,
+          'parroco': parrocoTrovato,
+        });
+      }
+
+      final unici = <String, Map<String, String>>{};
+      for (final r in risultati) {
+        final key = '${r['nome']}|${r['indirizzo']}'.toLowerCase();
+        unici[key] = r;
+      }
+      final lista = unici.values.toList();
+
+      if (!mounted) return;
+      if (lista.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nessuna parrocchia trovata. Prova con una denominazione più semplice.')),
+        );
+        return;
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('Risultati CEI (${lista.length})'),
+          content: SizedBox(
+            width: 650,
+            height: 500,
+            child: ListView.separated(
+              itemCount: lista.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, index) {
+                final r = lista[index];
+                return ListTile(
+                  leading: const Icon(Icons.church_outlined),
+                  title: Text(r['nome'] ?? ''),
+                  subtitle: Text([
+                    if ((r['indirizzo'] ?? '').isNotEmpty) r['indirizzo']!,
+                    if ((r['parroco'] ?? '').isNotEmpty) 'Parroco: ${r['parroco']!}',
+                  ].join('\n')),
+                  isThreeLine: (r['parroco'] ?? '').isNotEmpty,
+                  onTap: () {
+                    nome.text = r['nome'] ?? '';
+                    parrocchia.text = r['nome'] ?? '';
+                    indirizzo.text = r['indirizzo'] ?? '';
+                    parroco.text = r['parroco'] ?? '';
+                    Navigator.pop(dialogContext);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('ANNULLA')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).maybePop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore durante la ricerca CEI: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _elimina(Map<String, dynamic> c) async {
     final ok = await showDialog<bool>(
       context: context,
