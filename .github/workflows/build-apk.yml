@@ -53,32 +53,23 @@ jobs:
         run: |
           set -e
           flutter create --platforms=android --project-name preventivi_app .
-          echo "Contenuto android/app:"
-          find android/app -maxdepth 2 -type f -print | sort
-
-      - name: Configure Android notification permissions
-        working-directory: ${{ env.APP_DIR }}
-        shell: bash
-        run: |
-          set -e
+          # flutter create genera la cartella Android ad ogni build.
+          # Aggiungiamo il permesso Android 13+ per le notifiche.
           python3 - <<'PY'
           from pathlib import Path
-          manifest = Path("android/app/src/main/AndroidManifest.xml")
-          if not manifest.exists():
-              raise SystemExit("AndroidManifest.xml non trovato")
-          s = manifest.read_text()
-          permissions = [
-              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
-              '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>',
-          ]
-          for perm in permissions:
-              if perm not in s:
-                  s = s.replace('<manifest ', '<manifest ', 1)
-                  marker = '<application'
-                  s = s.replace(marker, perm + '\n    ' + marker, 1)
-          manifest.write_text(s)
-          print("Permessi notifiche Android configurati.")
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+          if permission not in s:
+              end = s.find('>')
+              if end == -1 or not s.lstrip().startswith('<manifest'):
+                  raise SystemExit("AndroidManifest.xml non contiene un tag <manifest> valido")
+              s = s[:end + 1] + "\n" + permission + s[end + 1:]
+              p.write_text(s)
+          print("Permesso notifiche configurato:", p)
           PY
+          echo "Contenuto android/app:"
+          find android/app -maxdepth 2 -type f -print | sort
 
       - name: Configure Android core library desugaring
         working-directory: ${{ env.APP_DIR }}

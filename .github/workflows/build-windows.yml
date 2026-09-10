@@ -1,0 +1,115 @@
+name: Build Preventivi Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows EXE and installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find Flutter project
+        shell: pwsh
+        run: |
+          $pub = Get-ChildItem -Path . -Filter pubspec.yaml -Recurse |
+            Where-Object { $_.FullName -notmatch '\\.dart_tool\\' } |
+            Select-Object -First 1
+          if (-not $pub) { throw "pubspec.yaml non trovato" }
+          $appDir = $pub.Directory.FullName
+          "APP_DIR=$appDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Progetto Flutter: $appDir"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.3'
+          channel: stable
+          cache: true
+
+      - name: Prepare Windows project
+        working-directory: ${{ env.APP_DIR }}
+        shell: pwsh
+        run: |
+          flutter config --enable-windows-desktop
+          flutter create --platforms=windows --project-name preventivi_app .
+          flutter pub get
+
+      - name: Analyze
+        working-directory: ${{ env.APP_DIR }}
+        shell: pwsh
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build Windows release
+        working-directory: ${{ env.APP_DIR }}
+        shell: pwsh
+        run: flutter build windows --release
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $app = "${{ env.APP_DIR }}\build\windows\x64\runner\Release"
+          if (-not (Test-Path $app)) { throw "Build Windows non trovata: $app" }
+          Compress-Archive -Path "$app\*" -DestinationPath "$env:GITHUB_WORKSPACE\Preventivi-Windows-Portable.zip" -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Create installer script
+        shell: pwsh
+        run: |
+          $iss = @"
+          [Setup]
+          AppName=Gestione Preventivi
+          AppVersion=1.1.0
+          AppPublisher=Gestione Preventivi
+          DefaultDirName={autopf}\Gestione Preventivi
+          DefaultGroupName=Gestione Preventivi
+          OutputDir=$env:GITHUB_WORKSPACE\installer
+          OutputBaseFilename=Gestione-Preventivi-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesInstallIn64BitMode=x64compatible
+          UninstallDisplayIcon={app}\preventivi_app.exe
+
+          [Files]
+          Source: "${{ env.APP_DIR }}\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+
+          [Icons]
+          Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
+          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"; Tasks: desktopicon
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Crea un collegamento sul desktop"; GroupDescription: "Collegamenti:"
+
+          [Run]
+          Filename: "{app}\preventivi_app.exe"; Description: "Avvia Gestione Preventivi"; Flags: nowait postinstall skipifsilent
+          "@
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\installer" | Out-Null
+          Set-Content -Path "$env:GITHUB_WORKSPACE\preventivi.iss" -Value $iss -Encoding UTF8
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "$env:GITHUB_WORKSPACE\preventivi.iss"
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\installer\Gestione-Preventivi-Setup.exe")) {
+            throw "Installer non creato"
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gestione-Preventivi-Windows
+          path: |
+            Preventivi-Windows-Portable.zip
+            installer/Gestione-Preventivi-Setup.exe
+          if-no-files-found: error
