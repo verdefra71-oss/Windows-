@@ -48,11 +48,24 @@ jobs:
         shell: pwsh
         run: flutter analyze --no-fatal-infos
 
+      - name: Install Visual Studio 2022 Build Tools if needed
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $found = $false
+          if (Test-Path $vswhere) {
+            $path = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            if ($path) { $found = $true; Write-Host "Visual Studio trovato: $path" }
+          }
+          if (-not $found) {
+            Write-Host "Visual Studio C++ non trovato: installo Build Tools 2022..."
+            choco install visualstudio2022buildtools --no-progress -y --package-parameters='--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart'
+          }
+
       - name: Configure Visual Studio 2022 environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-          vsversion: 2022
 
       - name: Clean Windows generated files
         working-directory: ${{ env.APP_DIR }}
