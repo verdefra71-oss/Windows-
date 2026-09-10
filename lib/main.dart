@@ -2003,14 +2003,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
             ),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.38,
-              children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 800;
+                return GridView.count(
+                  crossAxisCount: wide ? 4 : 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: wide ? 2.35 : 1.38,
+                  children: [
                 _statCard(
                   Icons.receipt_long_rounded,
                   'Preventivi',
@@ -2056,7 +2059,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   'Notifiche',
                   () => apri(const NotificheScreen()),
                 ),
-              ],
+                  ],
+                );
+              },
             ),
           ],
         ),
