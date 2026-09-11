@@ -1,9 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:http/http.dart' as http;
-import 'package:html/parser.dart' as html_parser;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
@@ -222,7 +219,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 13,
+      version: 12,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -233,8 +230,7 @@ CREATE TABLE clienti (
   indirizzo TEXT,
   partita_iva TEXT,
   codice_fiscale TEXT,
-  parrocchia TEXT,
-  parroco TEXT
+  parrocchia TEXT
 )
 ''');
 
@@ -351,9 +347,6 @@ CREATE TABLE fatture (
           // Normalizza i vecchi preventivi: garantisce che i campi usati
           // dalla schermata Modifica siano sempre valorizzati.
           await db.execute("UPDATE preventivi SET accettato = COALESCE(accettato, 0), pagato = COALESCE(pagato, 0), acconti = COALESCE(acconti, '[]')");
-        }
-        if (oldVersion < 13) {
-          await db.execute("ALTER TABLE clienti ADD COLUMN parroco TEXT");
         }
       },
     );
@@ -480,7 +473,6 @@ CREATE TABLE fatture (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
-    String parroco = '',
   }) async {
     final id = await (await database).insert('clienti', {
       'nome': nome,
@@ -490,7 +482,6 @@ CREATE TABLE fatture (
       'partita_iva': partitaIva,
       'codice_fiscale': codiceFiscale,
       'parrocchia': parrocchia,
-      'parroco': parroco,
     });
     await autoBackup();
     return id;
@@ -505,7 +496,6 @@ CREATE TABLE fatture (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
-    String parroco = '',
   }) async {
     final result = await (await database).update(
       'clienti',
@@ -517,7 +507,6 @@ CREATE TABLE fatture (
         'partita_iva': partitaIva,
         'codice_fiscale': codiceFiscale,
         'parrocchia': parrocchia,
-        'parroco': parroco,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -1193,14 +1182,17 @@ class PdfGenerator {
             ],
           ),
           pw.SizedBox(height: 18),
-          pw.Text('CLIENTE', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
-          pw.SizedBox(height: 4),
-          pw.Text(cliente, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text('DATI DESTINATARIO', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
+          pw.SizedBox(height: 5),
+          if (value('parrocchia').isNotEmpty)
+            pw.Text('Parrocchia: ${value('parrocchia')}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           if (value('indirizzo').isNotEmpty) pw.Text('Indirizzo: ${value('indirizzo')}'),
           if (value('telefono').isNotEmpty) pw.Text('Telefono: ${value('telefono')}'),
           if (value('email').isNotEmpty) pw.Text('Email: ${value('email')}'),
           if (value('partita_iva').isNotEmpty) pw.Text('Partita IVA: ${value('partita_iva')}'),
           if (value('codice_fiscale').isNotEmpty) pw.Text('Codice Fiscale: ${value('codice_fiscale')}'),
+          pw.SizedBox(height: 5),
+          pw.Text('Cliente: $cliente', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 20),
           pw.Table(
             border: pw.TableBorder.all(color: PdfColor.fromHex('#D8C98A')),
@@ -4181,8 +4173,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['codice_fiscale'] ?? '');
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
-    final parroco =
-        TextEditingController(text: cliente?['parroco'] ?? '');
     final key = GlobalKey<FormState>();
 
     await showModalBottomSheet(
@@ -4228,61 +4218,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Parrocchia',
                     prefixIcon: Icon(Icons.church_outlined),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: parroco,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Parroco / Amministratore parrocchiale',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  elevation: 0,
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.travel_explore),
-                            SizedBox(width: 8),
-                            Text(
-                              'RICERCA PARROCCHIA ONLINE',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          "Cerca nell'Annuario CEI per nome e comune.",
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: () => _apriRicercaParrocchiaCEI(
-                              nome: nome,
-                              parrocchia: parrocchia,
-                              parroco: parroco,
-                              telefono: telefono,
-                              email: email,
-                              indirizzo: indirizzo,
-                              partitaIva: partitaIva,
-                              codiceFiscale: codiceFiscale,
-                            ),
-                            icon: const Icon(Icons.search),
-                            label: const Text('CERCA PARROCCHIA'),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -4347,7 +4282,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          parroco: parroco.text.trim(),
                         );
                       } else {
                         await DatabaseHelper.instance.updateCliente(
@@ -4359,7 +4293,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          parroco: parroco.text.trim(),
                         );
                       }
 
@@ -4388,7 +4321,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
     partitaIva.dispose();
     codiceFiscale.dispose();
     parrocchia.dispose();
-    parroco.dispose();
   }
 
   Future<void> _apriMaps(String indirizzo) async {
@@ -4413,462 +4345,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Impossibile aprire Google Maps.')),
-        );
-      }
-    }
-  }
-
-
-  Future<void> _apriRicercaParrocchiaCEI({
-    required TextEditingController nome,
-    required TextEditingController parrocchia,
-    required TextEditingController parroco,
-    required TextEditingController telefono,
-    required TextEditingController email,
-    required TextEditingController indirizzo,
-    required TextEditingController partitaIva,
-    required TextEditingController codiceFiscale,
-  }) async {
-    final ricercaNome = TextEditingController(
-      text: parrocchia.text.trim(),
-    );
-    final ricercaComune = TextEditingController();
-
-    try {
-      final avvia = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.church_outlined),
-              SizedBox(width: 10),
-              Text('Cerca parrocchia'),
-            ],
-          ),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: ricercaNome,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Nome parrocchia',
-                    hintText: 'Es. Santa Maria Assunta',
-                    prefixIcon: Icon(Icons.church_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: ricercaComune,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Comune / Paese',
-                    hintText: 'Es. Arzano',
-                    prefixIcon: Icon(Icons.location_city_outlined),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Il comune è facoltativo, ma aiuta a trovare la parrocchia corretta.",
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('ANNULLA'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              icon: const Icon(Icons.search),
-              label: const Text('CERCA'),
-            ),
-          ],
-        ),
-      );
-
-      if (avvia != true) return;
-
-      await _cercaParrocchiaCEI(
-        queryNome: ricercaNome.text.trim(),
-        queryComune: ricercaComune.text.trim(),
-        nome: nome,
-        parrocchia: parrocchia,
-        parroco: parroco,
-        telefono: telefono,
-        email: email,
-        indirizzo: indirizzo,
-        partitaIva: partitaIva,
-        codiceFiscale: codiceFiscale,
-      );
-    } finally {
-      ricercaNome.dispose();
-      ricercaComune.dispose();
-    }
-  }
-
-  Future<void> _cercaParrocchiaCEI({
-    required String queryNome,
-    required String queryComune,
-    required TextEditingController nome,
-    required TextEditingController parrocchia,
-    required TextEditingController parroco,
-    required TextEditingController telefono,
-    required TextEditingController email,
-    required TextEditingController indirizzo,
-    required TextEditingController partitaIva,
-    required TextEditingController codiceFiscale,
-  }) async {
-    final nomeInput = queryNome.trim();
-    final comuneInput = queryComune.trim();
-
-    if (nomeInput.isEmpty && comuneInput.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Inserisci almeno il nome della parrocchia oppure il Comune.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 18),
-            Expanded(child: Text("Ricerca nell'Annuario CEI...")),
-          ],
-        ),
-      ),
-    );
-
-    String normalizza(String value) {
-      return value
-          .toUpperCase()
-          .replaceAll(RegExp(r"[.,'’]"), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-    }
-
-    String pulisci(String value) {
-      return value.replaceAll(RegExp(r'\s+'), ' ').trim();
-    }
-
-    final risultati = <Map<String, String>>[];
-    final giaScaricate = <String>{};
-
-    void aggiungiRisultato(
-      String nomeParrocchia,
-      String blocco,
-    ) {
-      final nomePulito = pulisci(nomeParrocchia);
-      if (nomePulito.isEmpty) return;
-
-      var resto = pulisci(blocco);
-      if (normalizza(resto).contains(normalizza(nomePulito))) {
-        // Usiamo la lunghezza del testo originale, non quella normalizzata,
-        // perché la normalizzazione può modificare apostrofi e punteggiatura.
-        final posizioneOriginale = resto.toUpperCase().indexOf(
-          nomePulito.toUpperCase(),
-        );
-        if (posizioneOriginale >= 0) {
-          resto = resto.substring(
-            posizioneOriginale + nomePulito.length,
-          ).trim();
-        }
-      }
-
-      final parrocoMatch = RegExp(
-        r'(?:Parroco|Amministratore parrocchiale|Parroco in solidum moderatore|Vicario Parrocchiale):\s*(.*?)(?=\s+(?:BeWeb|Orari Messe|Diocesi|Numero di abitanti)|$)',
-        caseSensitive: false,
-      ).firstMatch(resto);
-
-      final parrocoTrovato = pulisci(parrocoMatch?.group(1) ?? '');
-      var indirizzoTrovato = resto;
-
-      if (parrocoMatch != null) {
-        indirizzoTrovato = indirizzoTrovato
-            .substring(0, parrocoMatch.start)
-            .trim();
-      }
-
-      indirizzoTrovato = indirizzoTrovato
-          .replaceFirst(
-            RegExp(
-              r'\s+Numero di abitanti:.*$',
-              caseSensitive: false,
-            ),
-            '',
-          )
-          .replaceFirst(
-            RegExp(
-              r'\s+(?:BeWeb|Orari Messe|Diocesi).*$',
-              caseSensitive: false,
-            ),
-            '',
-          )
-          .trim();
-
-      risultati.add({
-        'nome': nomePulito,
-        'indirizzo': pulisci(indirizzoTrovato),
-        'parroco': parrocoTrovato,
-      });
-    }
-
-    void analizzaDocumento(String body) {
-      final document = html_parser.parse(body);
-      for (final heading in document.querySelectorAll('h4, h3')) {
-        final nomeParrocchia = pulisci(heading.text);
-        if (nomeParrocchia.isEmpty) continue;
-
-        var node = heading.parent;
-        String blocco = '';
-        for (var i = 0; i < 14 && node != null; i++) {
-          final testo = pulisci(node.text);
-          if (testo.length > blocco.length) blocco = testo;
-          final upper = testo.toUpperCase();
-          if (upper.contains('NUMERO DI ABITANTI') ||
-              upper.contains('PARROCO:') ||
-              upper.contains('AMMINISTRATORE PARROCCHIALE:')) {
-            break;
-          }
-          node = node.parent;
-        }
-        if (blocco.isNotEmpty) aggiungiRisultato(nomeParrocchia, blocco);
-      }
-    }
-
-    Future<void> scarica(String url) async {
-      if (giaScaricate.contains(url)) return;
-      giaScaricate.add(url);
-      try {
-        final response = await http.get(
-          Uri.parse(url),
-          headers: const {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
-            'Accept':
-                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'it-IT,it;q=0.9',
-          },
-        ).timeout(const Duration(seconds: 15));
-        if (response.statusCode == 200) {
-          analizzaDocumento(response.body);
-        }
-      } catch (_) {
-        // Un tentativo fallito non deve interrompere le altre strategie.
-      }
-    }
-
-    try {
-      // 1) Tentativo diretto con i parametri utilizzati dall'Annuario CEI.
-      final richieste = <Map<String, String>>[
-        {
-          if (nomeInput.isNotEmpty) 'nome': nomeInput,
-          if (comuneInput.isNotEmpty) 'comune': comuneInput,
-          'pagina': '1',
-        },
-        {
-          if (nomeInput.isNotEmpty) 'nome': nomeInput,
-          'pagina': '1',
-        },
-        {
-          if (comuneInput.isNotEmpty) 'comune': comuneInput,
-          'pagina': '1',
-        },
-      ];
-
-      for (final params in richieste) {
-        final uri = Uri.https(
-          'www.chiesacattolica.it',
-          '/annuario-cei/ricerca-parrocchie/',
-          params,
-        );
-        await scarica(uri.toString());
-        if (risultati.isNotEmpty) break;
-      }
-
-      // 2) Fallback: il sito CEI oggi richiede spesso anche il codice della
-      // diocesi/regione. Cerchiamo quindi una pagina CEI indicizzata dal motore
-      // di ricerca e poi scarichiamo direttamente quella pagina ufficiale.
-      if (risultati.isEmpty) {
-        final termini = [
-          if (nomeInput.isNotEmpty && comuneInput.isNotEmpty)
-            'site:chiesacattolica.it/annuario-cei/ricerca-parrocchie/ "$nomeInput" "$comuneInput"',
-          if (nomeInput.isNotEmpty)
-            'site:chiesacattolica.it/annuario-cei/ricerca-parrocchie/ "$nomeInput"',
-          if (comuneInput.isNotEmpty)
-            'site:chiesacattolica.it/annuario-cei/ricerca-parrocchie/ "$comuneInput"',
-        ];
-
-        for (final termine in termini) {
-          try {
-            final bingUri = Uri.https(
-              'www.google.com',
-              '/search',
-              {
-                'q': termine,
-                'num': '10',
-              },
-            );
-            final response = await http.get(
-              bingUri,
-              headers: const {
-                'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
-                'Accept-Language': 'it-IT,it;q=0.9',
-              },
-            ).timeout(const Duration(seconds: 10));
-
-            if (response.statusCode != 200) continue;
-
-            final document = html_parser.parse(response.body);
-            final linkRegex = RegExp(
-              r'https?://(?:www\.)?chiesacattolica\.it/annuario-cei/ricerca-parrocchie/[^\"&<> ]*',
-              caseSensitive: false,
-            );
-
-            final trovati = <String>{};
-            for (final element in document.querySelectorAll('a')) {
-              var href = element.attributes['href'] ?? '';
-              href = href.replaceAll('&amp;', '&');
-
-              final match = linkRegex.firstMatch(href);
-              if (match != null) {
-                trovati.add(match.group(0)!);
-                continue;
-              }
-
-              // Google spesso restituisce il risultato come /url?q=...
-              try {
-                final parsed = Uri.tryParse(href);
-                final destinazione = parsed?.queryParameters['q'] ??
-                    parsed?.queryParameters['url'];
-                if (destinazione != null &&
-                    linkRegex.hasMatch(destinazione)) {
-                  trovati.add(linkRegex.firstMatch(destinazione)!.group(0)!);
-                }
-              } catch (_) {}
-            }
-
-            for (final url in trovati.take(8)) {
-              await scarica(url);
-              if (risultati.isNotEmpty) break;
-            }
-            if (risultati.isNotEmpty) break;
-          } catch (_) {
-            // Fallback non disponibile: manteniamo il comportamento CEI diretto.
-          }
-        }
-      }
-
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-
-      final nomeRicerca = normalizza(nomeInput);
-      final comuneRicerca = normalizza(comuneInput);
-      final unici = <String, Map<String, String>>{};
-
-      for (final risultato in risultati) {
-        final testo = normalizza(
-          '${risultato['nome']} ${risultato['indirizzo']}',
-        );
-
-        if (nomeRicerca.isNotEmpty &&
-            !normalizza(risultato['nome'] ?? '').contains(nomeRicerca) &&
-            !testo.contains(nomeRicerca)) {
-          continue;
-        }
-        if (comuneRicerca.isNotEmpty && !testo.contains(comuneRicerca)) {
-          continue;
-        }
-
-        final chiave =
-            '${risultato['nome']}|${risultato['indirizzo']}'.toLowerCase();
-        unici[chiave] = risultato;
-      }
-
-      final lista = unici.values.toList();
-
-      if (!mounted) return;
-
-      if (lista.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Nessun risultato. Prova con una parte del nome e il Comune, ad esempio: "Spirito Santo" + "Arzano".',
-            ),
-            duration: Duration(seconds: 5),
-          ),
-        );
-        return;
-      }
-
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('Parrocchie trovate (${lista.length})'),
-          content: SizedBox(
-            width: 760,
-            height: 540,
-            child: ListView.separated(
-              itemCount: lista.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, index) {
-                final risultato = lista[index];
-                final indirizzoRisultato = risultato['indirizzo'] ?? '';
-                final parrocoRisultato = risultato['parroco'] ?? '';
-
-                return ListTile(
-                  leading: const Icon(Icons.church_outlined),
-                  title: Text(risultato['nome'] ?? ''),
-                  subtitle: Text(
-                    [
-                      if (indirizzoRisultato.isNotEmpty)
-                        indirizzoRisultato,
-                      if (parrocoRisultato.isNotEmpty)
-                        'Parroco/Amministratore: $parrocoRisultato',
-                    ].join('\n'),
-                  ),
-                  isThreeLine: parrocoRisultato.isNotEmpty,
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    nome.text = risultato['nome'] ?? '';
-                    parrocchia.text = risultato['nome'] ?? '';
-                    indirizzo.text = indirizzoRisultato;
-                    parroco.text = parrocoRisultato;
-                    Navigator.of(dialogContext).pop();
-                  },
-                );
-              },
-            ),
-          ),
-        ),
-      );
-    } catch (_) {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Impossibile collegarsi all\'Annuario CEI. Controlla la connessione Internet e riprova.',
-            ),
-          ),
         );
       }
     }
@@ -4975,8 +4451,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                         c['indirizzo'],
                       if ((c['parrocchia'] ?? '').toString().isNotEmpty)
                         'Parrocchia: ${c['parrocchia']}',
-                      if ((c['parroco'] ?? '').toString().isNotEmpty)
-                        'Parroco: ${c['parroco']}',
                     ].join('\n');
 
                     return Card(
