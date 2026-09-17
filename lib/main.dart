@@ -58,22 +58,23 @@ class PreventiviApp extends StatelessWidget {
           primary: const Color(0xFF9A7000),
           onPrimary: Colors.white,
           secondary: const Color(0xFFD4AF37),
-          surface: const Color(0xFFFFFDF7),
+          surface: Colors.white,
           onSurface: const Color(0xFF222222),
         ),
-        scaffoldBackgroundColor: const Color(0xFFFFFDF7),
+        scaffoldBackgroundColor: Colors.white,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFFFFBF0),
-          foregroundColor: Color(0xFF6F5200),
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF8A6200),
           elevation: 0,
-          shadowColor: Colors.transparent,
           centerTitle: true,
+          iconTheme: IconThemeData(color: Color(0xFF8A6200), size: 28),
+          actionsIconTheme: IconThemeData(color: Color(0xFF8A6200), size: 26),
         ),
         cardTheme: const CardThemeData(
           margin: EdgeInsets.zero,
           elevation: 1.5,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.all(Radius.circular(16)),
           ),
         ),
         inputDecorationTheme: const InputDecorationTheme(
@@ -89,7 +90,7 @@ class PreventiviApp extends StatelessWidget {
             foregroundColor: Colors.white,
             minimumSize: const Size(0, 48),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
         ),
@@ -97,6 +98,7 @@ class PreventiviApp extends StatelessWidget {
       home: const DashboardScreen(),
     );
   }
+}
 }
 
 
@@ -1886,8 +1888,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool loading = true;
 
   static const _gold = Color(0xFFD4AF37);
-  static const _darkGold = Color(0xFF9A7000);
-  static const _cream = Color(0xFFFFF9E8);
+  static const _darkGold = Color(0xFF8A6200);
+  static const _pink = Color(0xFFFFE9F1);
+  static const _pinkStrong = Color(0xFFF8B8CF);
 
   @override
   void initState() {
@@ -1926,10 +1929,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFFFBFC),
       appBar: AppBar(
         title: const Text(
-          'PREVENTIVI',
-          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
+          'Gestione Preventivi',
+          style: TextStyle(
+            color: Color(0xFF29211F),
+            fontWeight: FontWeight.w800,
+            letterSpacing: .2,
+          ),
         ),
         actions: [
           IconButton(
@@ -1937,239 +1945,250 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: caricaStatistiche,
             icon: const Icon(Icons.refresh_rounded),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
         color: _darkGold,
         onRefresh: caricaStatistiche,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-          children: [
-            // Azione principale sempre immediatamente disponibile.
-            Card(
-              color: _gold,
-              elevation: 2,
-              shadowColor: const Color(0x33000000),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(17, 14, 14, 14),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 132,
-                      height: 58,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Image.asset(
-                        'assets/logo.png',
-                        fit: BoxFit.contain,
-                      ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxHeight < 720;
+            final horizontal = constraints.maxWidth < 900 ? 24.0 : 42.0;
+            final tileHeight = compact ? 142.0 : 158.0;
+
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(horizontal, 14, horizontal, 22),
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.fromLTRB(
+                      20, compact ? 12 : 16, 20, compact ? 12 : 16,
                     ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Gestione Preventivi',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: _gold.withValues(alpha: .55),
+                        width: 1.4,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _pinkStrong.withValues(alpha: .20),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: compact ? 102 : 126,
+                            child: Image.asset(
+                              'assets/logo.png',
+                              fit: BoxFit.contain,
+                              alignment: Alignment.centerLeft,
                             ),
                           ),
-                          SizedBox(height: 3),
-                          Text(
-                            'Crea e gestisci i tuoi preventivi',
-                            style: TextStyle(color: Colors.white),
+                        ),
+                        const SizedBox(width: 18),
+                        Container(
+                          width: 1,
+                          height: compact ? 72 : 92,
+                          color: _gold.withValues(alpha: .45),
+                        ),
+                        const SizedBox(width: 22),
+                        const Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'GESTIONE PREVENTIVI',
+                                style: TextStyle(
+                                  color: _darkGold,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              SizedBox(height: 7),
+                              Text(
+                                'Tutto il tuo lavoro,\nsemplice e ordinato.',
+                                style: TextStyle(
+                                  color: Color(0xFF514644),
+                                  fontSize: 16,
+                                  height: 1.25,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: compact ? 16 : 22),
+                  _sectionHeader('GESTIONE', Icons.dashboard_customize_rounded, true),
+                  const SizedBox(height: 9),
+                  _buildMenuGrid(tileHeight),
+                  const SizedBox(height: 16),
+                  Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: const LinearGradient(
+                        colors: [_pinkStrong, _gold, _pinkStrong],
                       ),
                     ),
-                    IconButton.filled(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: _darkGold,
-                        minimumSize: const Size(42, 42),
-                      ),
-                      tooltip: 'Nuovo preventivo',
-                      onPressed: () => apri(const NuovoPreventivoScreen()),
-                      icon: const Icon(Icons.add_rounded, size: 23),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 18),
-
-            _sectionHeader('GESTIONE', Icons.dashboard_customize_rounded, true),
-            const SizedBox(height: 9),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 800;
-                return GridView.count(
-                  crossAxisCount: wide ? 4 : 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: wide ? 2.35 : 1.38,
-                  children: [
-                    _statCard(Icons.receipt_long_rounded, 'Preventivi', preventivi, () => apri(const ListaPreventiviScreen())),
-                    _statCard(Icons.receipt_long_rounded, 'Fatture', fatture, () => apri(const ListaFattureScreen())),
-                    _statCard(Icons.people_alt_rounded, 'Clienti', clienti, () => apri(const ClientiScreen())),
-                    _statCard(Icons.inventory_2_rounded, 'Prodotti / Servizi', prodotti, () => apri(const ProdottiScreen())),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 18),
-            _sectionHeader('RIEPILOGO', Icons.insights_rounded, false),
-            const SizedBox(height: 9),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 800;
-                return GridView.count(
-                  crossAxisCount: wide ? 4 : 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: wide ? 2.35 : 1.38,
-                  children: [
-                    _statCard(Icons.payments_rounded, 'Acconti', acconti, () => apri(const AccontiScreen())),
-                    _actionCard(Icons.request_quote_rounded, 'Crea fattura', () => apri(const CreaFatturaScreen())),
-                    _actionCard(Icons.backup_rounded, 'Backup e dati', () => apri(const BackupScreen())),
-                    _actionCard(Icons.notifications_active_rounded, 'Notifiche', () => apri(const NotificheScreen())),
-                  ],
-                );
-              },
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _sectionHeader(String title, IconData icon, bool primary) {
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: primary ? _gold : _cream,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, size: 19, color: primary ? Colors.white : _darkGold),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: primary ? 17 : 15,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.1,
-            color: primary ? _darkGold : const Color(0xFF6D6455),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Container(height: 1, color: primary ? const Color(0xFFE4CF96) : const Color(0xFFE9E3D7)),
-        ),
-      ],
+  Widget _buildMenuGrid(double tileHeight) {
+    final items = <_DashboardItem>[
+      _DashboardItem(
+        Icons.receipt_long_rounded,
+        'Nuovo\nPreventivo',
+        const NuovoPreventivoScreen(),
+      ),
+      _DashboardItem(
+        Icons.people_alt_rounded,
+        'Clienti',
+        const ClientiScreen(),
+      ),
+      _DashboardItem(
+        Icons.inventory_2_rounded,
+        'Prodotti /\nServizi',
+        const ProdottiScreen(),
+      ),
+      _DashboardItem(
+        Icons.list_alt_rounded,
+        'Lista\nPreventivi',
+        const ListaPreventiviScreen(),
+      ),
+      _DashboardItem(
+        Icons.payments_rounded,
+        'Acconti',
+        const AccontiScreen(),
+      ),
+      _DashboardItem(
+        Icons.receipt_rounded,
+        'Fatture',
+        const ListaFattureScreen(),
+      ),
+      _DashboardItem(
+        Icons.request_quote_rounded,
+        'Crea\nFattura',
+        const CreaFatturaScreen(),
+      ),
+      _DashboardItem(
+        Icons.settings_rounded,
+        'Gestione\nDati',
+        const BackupScreen(),
+      ),
+      _DashboardItem(
+        Icons.notifications_active_rounded,
+        'Notifiche',
+        const NotificheScreen(),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 1100
+            ? 4
+            : constraints.maxWidth >= 700
+                ? 3
+                : 2;
+        final gap = 14.0;
+        final width =
+            (constraints.maxWidth - gap * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          alignment: WrapAlignment.center,
+          children: items.map((item) {
+            return SizedBox(
+              width: width,
+              height: tileHeight,
+              child: _menuTile(item),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
-  Widget _statCard(
-    IconData icon,
-    String label,
-    int value,
-    VoidCallback onTap,
-  ) {
-    return Card(
-      color: const Color(0xFFFFFFFF),
-      clipBehavior: Clip.antiAlias,
-      shadowColor: const Color(0x18000000),
+  Widget _menuTile(_DashboardItem item) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
       child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: _cream,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: _darkGold, size: 23),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      loading ? '…' : '$value',
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => apri(item.page),
+        hoverColor: _pink,
+        splashColor: _pinkStrong.withValues(alpha: .20),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _gold.withValues(alpha: .72),
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: .07),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _actionCard(IconData icon, String title, VoidCallback onTap) {
-    return Card(
-      color: const Color(0xFFFFFFFF),
-      clipBehavior: Clip.antiAlias,
-      shadowColor: const Color(0x18000000),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 62,
+                height: 62,
                 decoration: BoxDecoration(
-                  color: _cream,
-                  borderRadius: BorderRadius.circular(10),
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [_gold, _darkGold],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _gold.withValues(alpha: .25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: Icon(icon, size: 24, color: _darkGold),
+                child: Icon(item.icon, color: Colors.white, size: 31),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Text(
-                title,
+                item.label,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13.5,
+                  color: Color(0xFF29211F),
+                  fontSize: 15,
+                  height: 1.12,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
@@ -2178,158 +2197,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  Widget _sectionHeader(String title, IconData icon, bool prominent) {
+    return Row(
+      children: [
+        Icon(icon, color: _darkGold, size: prominent ? 25 : 22),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            color: _darkGold,
+            fontSize: prominent ? 20 : 18,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
+class _DashboardItem {
+  final IconData icon;
+  final String label;
+  final Widget page;
 
-Future<String?> selezionaCliente(BuildContext context) async {
-  final clienti = await DatabaseHelper.instance.getClienti();
-  if (!context.mounted) return null;
-  return showDialog<String>(
-    context: context,
-    builder: (dialogContext) {
-      String query = '';
-      return StatefulBuilder(
-        builder: (context, setDialogState) {
-          final filtrati = clienti.where((c) {
-            final q = query.toLowerCase();
-            final nome = (c['nome'] ?? '').toString().toLowerCase();
-            final piva = (c['partita_iva'] ?? '').toString().toLowerCase();
-            final cf = (c['codice_fiscale'] ?? '').toString().toLowerCase();
-            final parrocchia = (c['parrocchia'] ?? '').toString().toLowerCase();
-            return nome.contains(q) || piva.contains(q) || cf.contains(q) || parrocchia.contains(q);
-          }).toList();
-          return AlertDialog(
-            title: const Text('Seleziona cliente'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    autofocus: true,
-                    onChanged: (v) => setDialogState(() => query = v),
-                    decoration: const InputDecoration(
-                      labelText: 'Cerca cliente',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Flexible(
-                    child: filtrati.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text('Nessun cliente trovato.'),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: filtrati.length,
-                            itemBuilder: (_, i) => ListTile(
-                              leading: const CircleAvatar(
-                                child: Icon(Icons.person_outline),
-                              ),
-                              title: Text(filtrati[i]['nome']),
-                              subtitle: Text(
-                                [
-                                  filtrati[i]['telefono'],
-                                  filtrati[i]['email'],
-                                  if ((filtrati[i]['parrocchia'] ?? '').toString().isNotEmpty) 'Parrocchia: ${filtrati[i]['parrocchia']}',
-                                ]
-                                    .where((x) => (x ?? '').toString().isNotEmpty)
-                                    .join(' • '),
-                              ),
-                              onTap: () => Navigator.pop(
-                                dialogContext,
-                                filtrati[i]['nome'].toString(),
-                              ),
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('ANNULLA'),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
-}
-
-Future<Map<String, dynamic>?> selezionaProdotto(BuildContext context) async {
-  final prodotti = await DatabaseHelper.instance.getProdotti();
-  if (!context.mounted) return null;
-  return showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (dialogContext) {
-      String query = '';
-      return StatefulBuilder(
-        builder: (context, setDialogState) {
-          final filtrati = prodotti.where((p) {
-            final nome = (p['nome'] ?? '').toString().toLowerCase();
-            return nome.contains(query.toLowerCase());
-          }).toList();
-          return AlertDialog(
-            title: const Text('Seleziona prodotto / servizio'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    autofocus: true,
-                    onChanged: (v) => setDialogState(() => query = v),
-                    decoration: const InputDecoration(
-                      labelText: 'Cerca servizio',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Flexible(
-                    child: filtrati.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text('Nessun servizio trovato.'),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: filtrati.length,
-                            itemBuilder: (_, i) => ListTile(
-                              leading: const Icon(Icons.inventory_2_outlined),
-                              title: Text(filtrati[i]['nome']),
-                              trailing: Text(
-                                '€ ${(filtrati[i]['prezzo'] as num).toDouble().toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              onTap: () => Navigator.pop(
-                                dialogContext,
-                                Map<String, dynamic>.from(filtrati[i]),
-                              ),
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('ANNULLA'),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
+  const _DashboardItem(this.icon, this.label, this.page);
 }
 
 class NuovoPreventivoScreen extends StatefulWidget {
