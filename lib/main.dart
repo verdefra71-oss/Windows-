@@ -658,6 +658,7 @@ CREATE TABLE fatture (
 
   Future<int> updatePreventivo({
     required int id,
+    required String numero,
     required String cliente,
     required double totale,
     required List<Map<String, dynamic>> articoli,
@@ -670,6 +671,7 @@ CREATE TABLE fatture (
     final result = await (await database).update(
       'preventivi',
       {
+        'numero': numero,
         'cliente': cliente,
         'totale': totale,
         'numero_rate': acconti.length,
@@ -2526,6 +2528,7 @@ Future<void> aggiungiAcconto() async {
 
   @override
   void dispose() {
+    numeroController.dispose();
     clienteController.dispose();
     prodottoController.dispose();
     prezzoController.dispose();
@@ -2562,9 +2565,10 @@ Future<void> aggiungiAcconto() async {
   Future<void> generaPreventivo() async {
     if (busy) return;
 
+    final numero = numeroController.text.trim();
     final cliente = clienteController.text.trim();
 
-    if (cliente.isEmpty || articoli.isEmpty) {
+    if (numero.isEmpty || cliente.isEmpty || articoli.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Inserisci il cliente e almeno un prodotto.'),
@@ -2676,6 +2680,19 @@ Future<void> aggiungiAcconto() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'Numero preventivo',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: numeroController,
+              decoration: const InputDecoration(
+                labelText: 'Numero progressivo',
+                prefixIcon: Icon(Icons.numbers),
+              ),
+            ),
+            const SizedBox(height: 24),
             const Text(
               'Dati Cliente',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -3410,6 +3427,7 @@ class ModificaPreventivoScreen extends StatefulWidget {
 
 class _ModificaPreventivoScreenState
     extends State<ModificaPreventivoScreen> {
+  late final TextEditingController numeroController;
   late final TextEditingController clienteController;
 
   final prodottoController = TextEditingController();
@@ -3655,6 +3673,9 @@ Future<void> aggiungiAcconto() async {
   void initState() {
     super.initState();
 
+    numeroController = TextEditingController(
+      text: (widget.preventivo['numero'] ?? '').toString(),
+    );
     clienteController = TextEditingController(
       text: widget.preventivo['cliente'],
     );
@@ -3687,6 +3708,7 @@ Future<void> aggiungiAcconto() async {
 
   @override
   void dispose() {
+    numeroController.dispose();
     clienteController.dispose();
     prodottoController.dispose();
     prezzoController.dispose();
@@ -3724,9 +3746,10 @@ Future<void> aggiungiAcconto() async {
   Future<void> salva() async {
     if (busy) return;
 
+    final numero = numeroController.text.trim();
     final cliente = clienteController.text.trim();
 
-    if (cliente.isEmpty || articoli.isEmpty) {
+    if (numero.isEmpty || cliente.isEmpty || articoli.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Inserisci il cliente e almeno un prodotto.'),
@@ -3752,6 +3775,7 @@ Future<void> aggiungiAcconto() async {
       final pagatoEffettivo = pagato || (totale - totaleAcconti <= 0.005);
       final updated = await db.updatePreventivo(
         id: preventivoId,
+        numero: numero,
         cliente: cliente,
         totale: totale,
         articoli: articoli,
@@ -3767,7 +3791,7 @@ Future<void> aggiungiAcconto() async {
       }
 
       await PdfGenerator.generaECondividiPreventivo(
-        numero: widget.preventivo['numero'],
+        numero: numero,
         cliente: cliente,
         articoli: articoli,
         ivaPercent: ivaPercent,
