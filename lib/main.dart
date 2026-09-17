@@ -2528,7 +2528,6 @@ Future<void> aggiungiAcconto() async {
 
   @override
   void dispose() {
-    numeroController.dispose();
     clienteController.dispose();
     prodottoController.dispose();
     prezzoController.dispose();
@@ -2565,10 +2564,9 @@ Future<void> aggiungiAcconto() async {
   Future<void> generaPreventivo() async {
     if (busy) return;
 
-    final numero = numeroController.text.trim();
     final cliente = clienteController.text.trim();
 
-    if (numero.isEmpty || cliente.isEmpty || articoli.isEmpty) {
+    if (cliente.isEmpty || articoli.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Inserisci il cliente e almeno un prodotto.'),
@@ -2680,19 +2678,6 @@ Future<void> aggiungiAcconto() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Numero preventivo',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: numeroController,
-              decoration: const InputDecoration(
-                labelText: 'Numero progressivo',
-                prefixIcon: Icon(Icons.numbers),
-              ),
-            ),
-            const SizedBox(height: 24),
             const Text(
               'Dati Cliente',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
