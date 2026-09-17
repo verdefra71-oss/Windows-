@@ -2643,6 +2643,105 @@ Future<void> aggiungiAcconto() async {
     }
   }
 
+  Future<void> modificaArticolo(int index) async {
+    final articolo = articoli[index];
+    final nomeController = TextEditingController(
+      text: (articolo['nome'] ?? '').toString(),
+    );
+    final prezzoControllerModifica = TextEditingController(
+      text: ((articolo['prezzo'] as num?)?.toDouble() ?? 0)
+          .toStringAsFixed(2),
+    );
+    final quantitaControllerModifica = TextEditingController(
+      text: ((articolo['quantita'] as num?)?.toDouble() ?? 1)
+          .toStringAsFixed(2),
+    );
+
+    try {
+      final risultato = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Modifica prodotto / servizio'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nomeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Descrizione',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantitaControllerModifica,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Quantità',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: prezzoControllerModifica,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Prezzo unitario €',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('ANNULLA'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final nome = nomeController.text.trim();
+                final prezzo = double.tryParse(
+                  prezzoControllerModifica.text.trim().replaceAll(',', '.'),
+                );
+                final quantita = double.tryParse(
+                  quantitaControllerModifica.text.trim().replaceAll(',', '.'),
+                );
+
+                if (nome.isEmpty ||
+                    prezzo == null ||
+                    prezzo < 0 ||
+                    quantita == null ||
+                    quantita <= 0) {
+                  return;
+                }
+
+                Navigator.pop(dialogContext, {
+                  'nome': nome,
+                  'prezzo': prezzo,
+                  'quantita': quantita,
+                });
+              },
+              child: const Text('SALVA'),
+            ),
+          ],
+        ),
+      );
+
+      if (risultato != null && mounted) {
+        setState(() {
+          articoli[index] = risultato;
+        });
+      }
+    } finally {
+      nomeController.dispose();
+      prezzoControllerModifica.dispose();
+      quantitaControllerModifica.dispose();
+    }
+  }
+
   Widget _riepilogoRiga(
     String label,
     double value, {
@@ -3843,6 +3942,14 @@ Future<void> aggiungiAcconto() async {
             ),
             const SizedBox(height: 8),
             TextField(
+              controller: numeroController,
+              decoration: const InputDecoration(
+                labelText: 'Numero preventivo',
+                prefixIcon: Icon(Icons.numbers),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               controller: clienteController,
               decoration: const InputDecoration(
                 labelText: 'Nome / Ragione Sociale',
@@ -3934,11 +4041,22 @@ Future<void> aggiungiAcconto() async {
                       subtitle: Text(
                         'Quantità: ${quantita.toStringAsFixed(2)}  •  Prezzo unitario: € ${prezzo.toStringAsFixed(2)}  •  Totale: € ${riga.toStringAsFixed(2)}',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () {
-                          setState(() => articoli.removeAt(i));
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Modifica prodotto / prezzo',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => modificaArticolo(i),
+                          ),
+                          IconButton(
+                            tooltip: 'Elimina prodotto',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () {
+                              setState(() => articoli.removeAt(i));
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },
