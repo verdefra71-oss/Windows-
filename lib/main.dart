@@ -2224,13 +2224,6 @@ class _DashboardItem {
   const _DashboardItem(this.icon, this.label, this.page);
 }
 
-class NuovoPreventivoScreen extends StatefulWidget {
-  const NuovoPreventivoScreen({super.key});
-
-  @override
-  State<NuovoPreventivoScreen> createState() => _NuovoPreventivoScreenState();
-}
-
 Future<String?> selezionaCliente(BuildContext context) async {
   final clienti = await DatabaseHelper.instance.getClienti();
   if (!context.mounted) return null;
