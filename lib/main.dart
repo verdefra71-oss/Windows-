@@ -99,7 +99,6 @@ class PreventiviApp extends StatelessWidget {
     );
   }
 }
-}
 
 
 class NotificationService {
@@ -2223,6 +2222,164 @@ class _DashboardItem {
   final Widget page;
 
   const _DashboardItem(this.icon, this.label, this.page);
+}
+
+class NuovoPreventivoScreen extends StatefulWidget {
+  const NuovoPreventivoScreen({super.key});
+
+  @override
+  State<NuovoPreventivoScreen> createState() => _NuovoPreventivoScreenState();
+}
+
+Future<String?> selezionaCliente(BuildContext context) async {
+  final clienti = await DatabaseHelper.instance.getClienti();
+  if (!context.mounted) return null;
+  return showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      String query = '';
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          final filtrati = clienti.where((c) {
+            final q = query.toLowerCase();
+            final nome = (c['nome'] ?? '').toString().toLowerCase();
+            final piva = (c['partita_iva'] ?? '').toString().toLowerCase();
+            final cf = (c['codice_fiscale'] ?? '').toString().toLowerCase();
+            final parrocchia = (c['parrocchia'] ?? '').toString().toLowerCase();
+            return nome.contains(q) || piva.contains(q) || cf.contains(q) || parrocchia.contains(q);
+          }).toList();
+          return AlertDialog(
+            title: const Text('Seleziona cliente'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    autofocus: true,
+                    onChanged: (v) => setDialogState(() => query = v),
+                    decoration: const InputDecoration(
+                      labelText: 'Cerca cliente',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Flexible(
+                    child: filtrati.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('Nessun cliente trovato.'),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: filtrati.length,
+                            itemBuilder: (_, i) => ListTile(
+                              leading: const CircleAvatar(
+                                child: Icon(Icons.person_outline),
+                              ),
+                              title: Text(filtrati[i]['nome']),
+                              subtitle: Text(
+                                [
+                                  filtrati[i]['telefono'],
+                                  filtrati[i]['email'],
+                                  if ((filtrati[i]['parrocchia'] ?? '').toString().isNotEmpty) 'Parrocchia: ${filtrati[i]['parrocchia']}',
+                                ]
+                                    .where((x) => (x ?? '').toString().isNotEmpty)
+                                    .join(' • '),
+                              ),
+                              onTap: () => Navigator.pop(
+                                dialogContext,
+                                filtrati[i]['nome'].toString(),
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('ANNULLA'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+Future<Map<String, dynamic>?> selezionaProdotto(BuildContext context) async {
+  final prodotti = await DatabaseHelper.instance.getProdotti();
+  if (!context.mounted) return null;
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (dialogContext) {
+      String query = '';
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          final filtrati = prodotti.where((p) {
+            final nome = (p['nome'] ?? '').toString().toLowerCase();
+            return nome.contains(query.toLowerCase());
+          }).toList();
+          return AlertDialog(
+            title: const Text('Seleziona prodotto / servizio'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    autofocus: true,
+                    onChanged: (v) => setDialogState(() => query = v),
+                    decoration: const InputDecoration(
+                      labelText: 'Cerca servizio',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Flexible(
+                    child: filtrati.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('Nessun servizio trovato.'),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: filtrati.length,
+                            itemBuilder: (_, i) => ListTile(
+                              leading: const Icon(Icons.inventory_2_outlined),
+                              title: Text(filtrati[i]['nome']),
+                              trailing: Text(
+                                '€ ${(filtrati[i]['prezzo'] as num).toDouble().toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onTap: () => Navigator.pop(
+                                dialogContext,
+                                Map<String, dynamic>.from(filtrati[i]),
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('ANNULLA'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
 }
 
 class NuovoPreventivoScreen extends StatefulWidget {
