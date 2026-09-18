@@ -79,6 +79,14 @@ jobs:
           flutter create --platforms=windows --project-name preventivi_app .
           flutter pub get
 
+          # Applica la nuova icona BTS all'eseguibile Windows.
+          $icon = Join-Path $env:APP_DIR 'assets\app_icon.ico'
+          $target = Join-Path $env:APP_DIR 'windows\runner\resources\app_icon.ico'
+          if (-not (Test-Path $icon)) { throw "Icona Windows non trovata: $icon" }
+          if (-not (Test-Path (Split-Path $target))) { throw "Cartella risorse Windows non trovata: $(Split-Path $target)" }
+          Copy-Item -Path $icon -Destination $target -Force
+          Write-Host "Icona BTS applicata: $target"
+
       - name: Verify Visual Studio 2022 and CMake
         shell: pwsh
         run: |
