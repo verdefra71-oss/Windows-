@@ -743,23 +743,73 @@ CREATE TABLE fatture (
       (decoded['fatture'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
     );
     final db = await database;
+
+    // L'importazione è un MERGE, non una sostituzione del database.
+    // Se una riga del backup ha un id già presente, viene aggiornata;
+    // se l'id non esiste, la riga viene aggiunta con un nuovo id.
+    // In questo modo i dati presenti sul dispositivo che non sono nel
+    // backup non vengono mai cancellati.
     await db.transaction((txn) async {
-      await txn.delete('preventivi');
-      await txn.delete('prodotti');
-      await txn.delete('clienti');
-      await txn.delete('fatture');
-      for (final row in clienti) {
-        await txn.insert('clienti', row);
+      Future<void> mergeRows(
+        String table,
+        List<Map<String, dynamic>> rows,
+      ) async {
+        if (rows.isEmpty) return;
+
+        final info = await txn.rawQuery('PRAGMA table_info($table)');
+        final columns = info
+            .map((c) => c['name']?.toString())
+            .whereType<String>()
+            .toSet();
+
+        for (final original in rows) {
+          // Ignora eventuali campi sconosciuti presenti in backup di versioni
+          // diverse dell'app, evitando che l'importazione si interrompa.
+          final row = <String, dynamic>{};
+          for (final entry in original.entries) {
+            if (columns.contains(entry.key)) {
+              row[entry.key] = entry.value;
+            }
+          }
+          if (row.isEmpty) continue;
+
+          final rawId = row['id'];
+          final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
+
+          if (id != null && id > 0) {
+            final existing = await txn.query(
+              table,
+              columns: const ['id'],
+              where: 'id = ?',
+              whereArgs: [id],
+              limit: 1,
+            );
+
+            if (existing.isNotEmpty) {
+              final values = Map<String, dynamic>.from(row)..remove('id');
+              if (values.isNotEmpty) {
+                await txn.update(
+                  table,
+                  values,
+                  where: 'id = ?',
+                  whereArgs: [id],
+                );
+              }
+              continue;
+            }
+          }
+
+          // Per una riga nuova non forziamo l'id del backup: SQLite assegna
+          // quello corretto evitando collisioni con dati già presenti.
+          row.remove('id');
+          await txn.insert(table, row);
+        }
       }
-      for (final row in prodotti) {
-        await txn.insert('prodotti', row);
-      }
-      for (final row in preventivi) {
-        await txn.insert('preventivi', row);
-      }
-      for (final row in fatture) {
-        await txn.insert('fatture', row);
-      }
+
+      await mergeRows('clienti', clienti);
+      await mergeRows('prodotti', prodotti);
+      await mergeRows('preventivi', preventivi);
+      await mergeRows('fatture', fatture);
     });
     await createAutomaticBackup();
   }
@@ -5278,7 +5328,7 @@ class _BackupScreenState extends State<BackupScreen> {
         builder: (context) => AlertDialog(
           title: const Text('Importa backup'),
           content: const Text(
-            'L’importazione sostituirà i dati attuali di clienti, servizi, preventivi e acconti. Continuare?',
+            'L’importazione aggiornerà i dati presenti e aggiungerà quelli nuovi. I dati che non sono nel backup non verranno cancellati. Continuare?',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ANNULLA')),
@@ -5354,7 +5404,7 @@ class _BackupScreenState extends State<BackupScreen> {
           ],
           const SizedBox(height: 18),
           const Text(
-            'Il backup contiene clienti, prodotti/servizi, preventivi e acconti. L’importazione sostituisce i dati presenti sul dispositivo.',
+            'Il backup contiene clienti, prodotti/servizi, preventivi e acconti. L’importazione aggiorna i dati esistenti e aggiunge quelli nuovi, senza cancellare i dati già presenti sul dispositivo.',
             style: TextStyle(fontSize: 13),
           ),
         ],
