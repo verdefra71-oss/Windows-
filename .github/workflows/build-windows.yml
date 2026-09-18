@@ -25,6 +25,11 @@ jobs:
       - name: Clean old Windows CMake files
         run: flutter clean
 
+      - name: Verify Windows CMake template
+        shell: powershell
+        run: |
+          if (!(Test-Path "windows/flutter/CMakeLists.txt")) { throw "windows/flutter/CMakeLists.txt missing" }
+
       - name: Get dependencies
         run: flutter pub get
 
