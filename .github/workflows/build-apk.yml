@@ -53,23 +53,46 @@ jobs:
         run: |
           set -e
           flutter create --platforms=android --project-name preventivi_app .
-          # flutter create genera la cartella Android ad ogni build.
-          # Aggiungiamo il permesso Android 13+ per le notifiche.
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("android/app/src/main/AndroidManifest.xml")
-          s = p.read_text()
-          permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
-          if permission not in s:
-              end = s.find('>')
-              if end == -1 or not s.lstrip().startswith('<manifest'):
-                  raise SystemExit("AndroidManifest.xml non contiene un tag <manifest> valido")
-              s = s[:end + 1] + "\n" + permission + s[end + 1:]
-              p.write_text(s)
-          print("Permesso notifiche configurato:", p)
-          PY
           echo "Contenuto android/app:"
           find android/app -maxdepth 2 -type f -print | sort
+
+      - name: Configure app icon
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          test -f "assets/app_icon.png" || { echo "assets/app_icon.png non trovato" >&2; exit 1; }
+          # Le icone Android sono già presenti nel repository come PNG validi,
+          # una dimensione per ogni densità. Nessun tool grafico esterno richiesto.
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            test -f "android/app/src/main/res/mipmap-${density}/ic_launcher.png" || { echo "Icona ${density} mancante" >&2; exit 1; }
+            test -f "android/app/src/main/res/mipmap-${density}/ic_launcher_round.png" || { echo "Icona round ${density} mancante" >&2; exit 1; }
+          done
+          echo "Icone Android VE PNG valide configurate."
+
+      - name: Configure Android notification permissions
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          if not manifest.exists():
+              raise SystemExit("AndroidManifest.xml non trovato")
+          s = manifest.read_text()
+          permissions = [
+              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
+              '    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>',
+          ]
+          for perm in permissions:
+              if perm not in s:
+                  s = s.replace('<manifest ', '<manifest ', 1)
+                  marker = '<application'
+                  s = s.replace(marker, perm + '\n    ' + marker, 1)
+          manifest.write_text(s)
+          print("Permessi notifiche Android configurati.")
+          PY
 
       - name: Configure Android core library desugaring
         working-directory: ${{ env.APP_DIR }}
