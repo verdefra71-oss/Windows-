@@ -36,3 +36,6 @@ Il progetto include il target desktop Windows. La versione Windows usa SQLite tr
 Per creare l'eseguibile su un ambiente Windows con Flutter:
 `flutter pub get`
 `flutter build windows --release`
+
+
+Windows build note: the GitHub workflow regenerates the Windows platform folder with the installed Flutter SDK before building. This avoids committing Flutter ephemeral C++ wrapper files or stale CMake templates.
