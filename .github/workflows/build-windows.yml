@@ -15,12 +15,15 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.3'
+          flutter-version: '3.41.9'
           channel: stable
           cache: true
 
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
+
+      - name: Clean old Windows CMake files
+        run: flutter clean
 
       - name: Get dependencies
         run: flutter pub get
