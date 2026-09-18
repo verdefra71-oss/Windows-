@@ -1,10 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart';
@@ -1537,7 +1535,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: pagamento,
+                    initialValue: pagamento,
                     decoration: const InputDecoration(
                       labelText: 'Pagamento',
                       prefixIcon: Icon(Icons.account_balance_wallet_outlined),
@@ -2530,7 +2528,7 @@ Future<void> aggiungiAcconto() async {
       final pagatoFinale = pagato || (totale - totaleAcconti <= 0.005);
       // Non cancellare gli acconti: devono rimanere nello storico e nel PDF.
 
-      final id = await db.insertPreventivo(
+      await db.insertPreventivo(
         numero: numero,
         cliente: cliente,
         totale: totale,
