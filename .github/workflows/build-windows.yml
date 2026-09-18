@@ -28,6 +28,15 @@ jobs:
           if (Test-Path "windows") { Remove-Item -Recurse -Force "windows" }
           flutter create --platforms=windows --project-name=gestione_preventivi .
 
+      - name: Configure MSVC for Windows notifications plugin
+        shell: powershell
+        run: |
+          $cmake = Get-Content "windows/CMakeLists.txt" -Raw
+          if ($cmake -notmatch "SILENCE_EXPERIMENTAL_COROUTINE") {
+            $cmake = $cmake -replace '(project\(runner LANGUAGES CXX\)\r?\n)', '$1\n# Compatibility with Visual Studio 2026 STL used by flutter_local_notifications_windows.\nadd_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)\n'
+            Set-Content "windows/CMakeLists.txt" $cmake -NoNewline
+          }
+
       - name: Get dependencies
         run: flutter pub get
 
