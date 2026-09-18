@@ -22,16 +22,17 @@ jobs:
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Clean old Windows CMake files
-        run: flutter clean
-
-      - name: Verify Windows CMake template
+      - name: Regenerate official Windows project
         shell: powershell
         run: |
-          if (!(Test-Path "windows/flutter/CMakeLists.txt")) { throw "windows/flutter/CMakeLists.txt missing" }
+          if (Test-Path "windows") { Remove-Item -Recurse -Force "windows" }
+          flutter create --platforms=windows --project-name=gestione_preventivi .
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Clean generated files
+        run: flutter clean
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos
