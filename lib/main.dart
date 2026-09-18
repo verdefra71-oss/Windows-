@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -22,22 +23,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Windows non dispone del backend nativo di sqflite mobile:
-  // usa SQLite via FFI mantenendo invariata la logica del database.
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    sqflite_ffi.sqfliteFfiInit();
-    databaseFactory = sqflite_ffi.databaseFactoryFfi;
-  }
-
-  // Le notifiche locali sono usate su Android/iOS/macOS.
-  // Su Windows/Linux le saltiamo per evitare che il plugin blocchi l'avvio.
-  if (!Platform.isWindows && !Platform.isLinux) {
+  // Windows usa SQLite tramite sqflite_common_ffi.
+  if (Platform.isWindows) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  } else {
     await NotificationService.instance.initialize();
   }
+
   await DatabaseHelper.instance.createAutomaticBackup();
-  if (!Platform.isWindows && !Platform.isLinux) {
+
+  // I promemoria locali sono mantenuti su Android/iOS; su Windows
+  // vengono disattivati perché non sono necessari per la versione desktop.
+  if (!Platform.isWindows) {
     await NotificationService.instance.refreshMonthlyReminder();
   }
+
   runApp(const PreventiviApp());
 }
 
@@ -64,11 +65,9 @@ class PreventiviApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
-          foregroundColor: Color(0xFF8A6200),
+          foregroundColor: Colors.white,
           elevation: 0,
           centerTitle: true,
-          iconTheme: IconThemeData(color: Color(0xFF8A6200), size: 28),
-          actionsIconTheme: IconThemeData(color: Color(0xFF8A6200), size: 26),
         ),
         cardTheme: const CardThemeData(
           margin: EdgeInsets.zero,
@@ -97,6 +96,8 @@ class PreventiviApp extends StatelessWidget {
       ),
       home: const DashboardScreen(),
     );
+
+
   }
 }
 
@@ -111,7 +112,7 @@ class NotificationService {
   static const _notificationId = 7001;
 
   Future<void> initialize() async {
-    if (Platform.isWindows || Platform.isLinux) return;
+    if (Platform.isWindows) return;
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Europe/Rome'));
 
@@ -127,7 +128,7 @@ class NotificationService {
   }
 
   Future<bool> requestPermission() async {
-    if (Platform.isWindows || Platform.isLinux) return false;
+    if (Platform.isWindows) return false;
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     final granted = await android?.requestNotificationsPermission();
@@ -135,15 +136,15 @@ class NotificationService {
   }
 
   Future<bool> isEnabled() async {
+    if (Platform.isWindows) return false;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_enabledKey) ?? false;
   }
 
   Future<void> setEnabled(bool enabled) async {
+    if (Platform.isWindows) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_enabledKey, enabled);
-
-    if (Platform.isWindows || Platform.isLinux) return;
 
     if (!enabled) {
       await _plugin.cancel(_notificationId);
@@ -155,7 +156,7 @@ class NotificationService {
   }
 
   Future<void> refreshMonthlyReminder() async {
-    if (Platform.isWindows || Platform.isLinux) return;
+    if (Platform.isWindows) return;
     if (!await isEnabled()) return;
 
     final saldi = await DatabaseHelper.instance.getPreventiviDaSaldare();
@@ -220,7 +221,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 12,
+      version: 11,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -344,11 +345,6 @@ CREATE TABLE fatture (
         if (oldVersion < 11) {
           await db.execute("ALTER TABLE preventivi ADD COLUMN pagato INTEGER NOT NULL DEFAULT 0");
         }
-        if (oldVersion < 12) {
-          // Normalizza i vecchi preventivi: garantisce che i campi usati
-          // dalla schermata Modifica siano sempre valorizzati.
-          await db.execute("UPDATE preventivi SET accettato = COALESCE(accettato, 0), pagato = COALESCE(pagato, 0), acconti = COALESCE(acconti, '[]')");
-        }
       },
     );
   }
@@ -367,8 +363,6 @@ CREATE TABLE fatture (
     final risultato = <Map<String, dynamic>>[];
 
     for (final p in preventivi) {
-      // Gli acconti/saldi riguardano esclusivamente preventivi accettati.
-      if ((p['accettato'] as num?)?.toInt() != 1) continue;
       if ((p['pagato'] as num?)?.toInt() == 1) continue;
 
       final totale = (p['totale'] as num?)?.toDouble() ?? 0;
@@ -406,8 +400,6 @@ CREATE TABLE fatture (
     final risultato = <Map<String, dynamic>>[];
 
     for (final p in preventivi) {
-      // Mostra gli acconti solo se il preventivo è stato accettato.
-      if ((p['accettato'] as num?)?.toInt() != 1) continue;
       try {
         final raw = jsonDecode((p['acconti'] ?? '[]').toString());
         if (raw is List) {
@@ -551,34 +543,6 @@ CREATE TABLE fatture (
     });
     await autoBackup();
     return id;
-  }
-
-  Future<int> updateFattura({
-    required int id,
-    required String numero,
-    required String cliente,
-    required List<Map<String, dynamic>> articoli,
-    required double ivaPercent,
-    required double totale,
-    required String pagamento,
-    String? iban,
-  }) async {
-    final result = await (await database).update(
-      'fatture',
-      {
-        'numero': numero,
-        'cliente': cliente,
-        'articoli': jsonEncode(articoli),
-        'iva_percent': ivaPercent,
-        'totale': totale,
-        'pagamento': pagamento,
-        'iban': iban,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    await autoBackup();
-    return result;
   }
 
   Future<int> deleteFattura(int id) async {
@@ -743,73 +707,31 @@ CREATE TABLE fatture (
       (decoded['fatture'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
     );
     final db = await database;
-
-    // L'importazione è un MERGE, non una sostituzione del database.
-    // Se una riga del backup ha un id già presente, viene aggiornata;
-    // se l'id non esiste, la riga viene aggiunta con un nuovo id.
-    // In questo modo i dati presenti sul dispositivo che non sono nel
-    // backup non vengono mai cancellati.
+    // L'importazione è incrementale: non cancella i dati già presenti.
+    // Le righe con lo stesso ID vengono aggiornate, quelle nuove vengono aggiunte.
     await db.transaction((txn) async {
-      Future<void> mergeRows(
-        String table,
-        List<Map<String, dynamic>> rows,
-      ) async {
-        if (rows.isEmpty) return;
-
-        final info = await txn.rawQuery('PRAGMA table_info($table)');
-        final columns = info
-            .map((c) => c['name']?.toString())
-            .whereType<String>()
-            .toSet();
-
-        for (final original in rows) {
-          // Ignora eventuali campi sconosciuti presenti in backup di versioni
-          // diverse dell'app, evitando che l'importazione si interrompa.
-          final row = <String, dynamic>{};
-          for (final entry in original.entries) {
-            if (columns.contains(entry.key)) {
-              row[entry.key] = entry.value;
-            }
+      Future<void> upsert(String table, Map<String, dynamic> row) async {
+        final id = row['id'];
+        if (id != null) {
+          final values = Map<String, dynamic>.from(row)..remove('id');
+          final updated = await txn.update(
+            table,
+            values,
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+          if (updated == 0) {
+            await txn.insert(table, row);
           }
-          if (row.isEmpty) continue;
-
-          final rawId = row['id'];
-          final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
-
-          if (id != null && id > 0) {
-            final existing = await txn.query(
-              table,
-              columns: const ['id'],
-              where: 'id = ?',
-              whereArgs: [id],
-              limit: 1,
-            );
-
-            if (existing.isNotEmpty) {
-              final values = Map<String, dynamic>.from(row)..remove('id');
-              if (values.isNotEmpty) {
-                await txn.update(
-                  table,
-                  values,
-                  where: 'id = ?',
-                  whereArgs: [id],
-                );
-              }
-              continue;
-            }
-          }
-
-          // Per una riga nuova non forziamo l'id del backup: SQLite assegna
-          // quello corretto evitando collisioni con dati già presenti.
-          row.remove('id');
+        } else {
           await txn.insert(table, row);
         }
       }
 
-      await mergeRows('clienti', clienti);
-      await mergeRows('prodotti', prodotti);
-      await mergeRows('preventivi', preventivi);
-      await mergeRows('fatture', fatture);
+      for (final row in clienti) await upsert('clienti', row);
+      for (final row in prodotti) await upsert('prodotti', row);
+      for (final row in preventivi) await upsert('preventivi', row);
+      for (final row in fatture) await upsert('fatture', row);
     });
     await createAutomaticBackup();
   }
@@ -964,6 +886,7 @@ class PdfGenerator {
                     pw.SizedBox(height: 8),
                     pw.Text('N. $numero', style: const pw.TextStyle(fontSize: 11)),
                     pw.Text('Data: $data', style: const pw.TextStyle(fontSize: 11)),
+
                   ],
                 ),
               ),
@@ -1215,7 +1138,7 @@ class PdfGenerator {
                     ),
                   pw.SizedBox(height: 6),
                   pw.Text(
-                    'FATTURA PRO-FORMA',
+                    'Fattura pro-forma',
                     style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
@@ -1229,23 +1152,20 @@ class PdfGenerator {
                 children: [
                   pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                   pw.Text('Data: $data'),
-                  pw.Text('marca da bollo assolta in originale'),
+                  pw.Text('Marca da bollo assolta in originale'),
                 ],
               ),
             ],
           ),
           pw.SizedBox(height: 18),
-          pw.Text('DATI DESTINATARIO', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
-          pw.SizedBox(height: 5),
-          if (value('parrocchia').isNotEmpty)
-            pw.Text('Parrocchia: ${value('parrocchia')}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text('CLIENTE', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
+          pw.SizedBox(height: 4),
+          pw.Text(cliente, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           if (value('indirizzo').isNotEmpty) pw.Text('Indirizzo: ${value('indirizzo')}'),
           if (value('telefono').isNotEmpty) pw.Text('Telefono: ${value('telefono')}'),
           if (value('email').isNotEmpty) pw.Text('Email: ${value('email')}'),
           if (value('partita_iva').isNotEmpty) pw.Text('Partita IVA: ${value('partita_iva')}'),
           if (value('codice_fiscale').isNotEmpty) pw.Text('Codice Fiscale: ${value('codice_fiscale')}'),
-          pw.SizedBox(height: 5),
-          pw.Text('Cliente: $cliente', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 20),
           pw.Table(
             border: pw.TableBorder.all(color: PdfColor.fromHex('#D8C98A')),
@@ -1278,10 +1198,14 @@ class PdfGenerator {
               children: [
                 pw.Text('DATI AZIENDA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: gold)),
                 pw.SizedBox(height: 4),
-                pw.Text('di CARPENTIERI ALFONSO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('Sede legale: via Ugo Pirro, 9 - 84100 Salerno'),
-                pw.Text('Cell. 328 697 2865'),
-                pw.Text('P. IVA 06051430657'),
+                pw.Text('Verde Emanuele', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('via Mario Francesco Pagano 8'),
+                pw.Text('80022 Arzano - NA'),
+                pw.Text('C.F. VRDMNL76H22F839Q'),
+                pw.Text('P.IVA 06089401217'),
+                pw.Text('Cel: 3331798874'),
+                pw.Text('verdeemanuele@gmail.com'),
+                pw.Text('PEC: verdeemanuele@pec.it'),
               ],
             ),
           ),
@@ -1293,10 +1217,10 @@ class PdfGenerator {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text('Metodo di pagamento: $pagamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                if (pagamento == 'Bonifico')
+                if (pagamento == 'Bonifico' && (iban ?? '').trim().isNotEmpty)
                   pw.Padding(
                     padding: const pw.EdgeInsets.only(top: 4),
-                    child: pw.Text('IBAN: ${((iban ?? '').trim().isEmpty ? 'IT28F0538715206000003630167' : iban!.trim())}'),
+                    child: pw.Text('IBAN: ${iban!.trim()}'),
                   ),
               ],
             ),
@@ -1307,7 +1231,7 @@ class PdfGenerator {
 
     await Printing.sharePdf(
       bytes: await pdf.save(),
-      filename: 'Fattura_Pro-Forma_$numero.pdf',
+      filename: 'Fattura_$numero.pdf',
     );
   }
 
@@ -1315,9 +1239,8 @@ class PdfGenerator {
 
 class CreaFatturaScreen extends StatefulWidget {
   final Map<String, dynamic>? preventivo;
-  final Map<String, dynamic>? fattura;
 
-  const CreaFatturaScreen({super.key, this.preventivo, this.fattura});
+  const CreaFatturaScreen({super.key, this.preventivo});
 
   @override
   State<CreaFatturaScreen> createState() => _CreaFatturaScreenState();
@@ -1340,16 +1263,14 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
   }
 
   Future<void> _precompila() async {
-    final f = widget.fattura;
-    if (f != null) {
-      _numero.text = (f['numero'] ?? '').toString();
-      cliente = (f['cliente'] ?? '').toString();
+    _numero.text = await DatabaseHelper.instance.prossimoNumeroFattura();
+    final p = widget.preventivo;
+    if (p != null) {
+      cliente = (p['cliente'] ?? '').toString();
       _cliente.text = cliente ?? '';
-      _iva.text = ((f['iva_percent'] as num?)?.toDouble() ?? 0).toString();
-      pagamento = (f['pagamento'] ?? 'Contanti').toString();
-      _iban.text = (f['iban'] ?? '').toString();
+      _iva.text = ((p['iva_percent'] as num?)?.toDouble() ?? 0).toString();
       try {
-        final raw = jsonDecode((f['articoli'] ?? '[]').toString());
+        final raw = jsonDecode((p['articoli'] ?? '[]').toString());
         if (raw is List) {
           articoli.addAll(raw.map((e) => {
             'nome': (e['nome'] ?? '').toString(),
@@ -1358,24 +1279,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           }));
         }
       } catch (_) {}
-    } else {
-      _numero.text = await DatabaseHelper.instance.prossimoNumeroFattura();
-      final p = widget.preventivo;
-      if (p != null) {
-        cliente = (p['cliente'] ?? '').toString();
-        _cliente.text = cliente ?? '';
-        _iva.text = ((p['iva_percent'] as num?)?.toDouble() ?? 0).toString();
-        try {
-          final raw = jsonDecode((p['articoli'] ?? '[]').toString());
-          if (raw is List) {
-            articoli.addAll(raw.map((e) => {
-              'nome': (e['nome'] ?? '').toString(),
-              'prezzo': (e['prezzo'] as num?)?.toDouble() ?? 0,
-              'quantita': (e['quantita'] as num?)?.toDouble() ?? 1,
-            }));
-          }
-        } catch (_) {}
-      }
     }
     if (mounted) setState(() {});
   }
@@ -1466,41 +1369,26 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
     setState(() => salvando = true);
     try {
       final numero = _numero.text.trim();
-      if (widget.fattura != null) {
-        await DatabaseHelper.instance.updateFattura(
-          id: (widget.fattura!['id'] as num).toInt(),
-          numero: numero,
-          cliente: cliente!,
-          articoli: articoli,
-          ivaPercent: ivaPercent,
-          totale: totale,
-          pagamento: pagamento,
-          iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
-        );
-      } else {
-        await DatabaseHelper.instance.insertFattura(
-          numero: numero,
-          cliente: cliente!,
-          articoli: articoli,
-          ivaPercent: ivaPercent,
-          totale: totale,
-          pagamento: pagamento,
-          iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
-        );
-      }
+      await DatabaseHelper.instance.insertFattura(
+        numero: numero,
+        cliente: cliente!,
+        articoli: articoli,
+        ivaPercent: ivaPercent,
+        totale: totale,
+        pagamento: pagamento,
+        iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
+      );
       await PdfGenerator.generaECondividiFattura(
         numero: numero,
         cliente: cliente!,
         articoli: articoli,
         ivaPercent: ivaPercent,
         pagamento: pagamento,
-        iban: pagamento == 'Bonifico'
-            ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
-            : null,
+        iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.fattura != null ? 'Fattura modificata e PDF pronto per la condivisione.' : 'Fattura salvata e PDF pronto per la condivisione.')),
+        const SnackBar(content: Text('Fattura salvata e PDF pronto per la condivisione.')),
       );
       Navigator.pop(context);
     } catch (e) {
@@ -1529,7 +1417,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
     const darkGold = Color(0xFF9A7000);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.fattura != null ? 'Modifica fattura' : (widget.preventivo == null ? 'Crea fattura' : 'Fattura da preventivo')),
+        title: Text(widget.preventivo == null ? 'Crea fattura' : 'Fattura da preventivo'),
         actions: [
           IconButton(
             tooltip: 'Salva fattura',
@@ -1649,7 +1537,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: pagamento,
+                    value: pagamento,
                     decoration: const InputDecoration(
                       labelText: 'Pagamento',
                       prefixIcon: Icon(Icons.account_balance_wallet_outlined),
@@ -1658,12 +1546,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                       DropdownMenuItem(value: 'Contanti', child: Text('Contanti')),
                       DropdownMenuItem(value: 'Bonifico', child: Text('Bonifico')),
                     ],
-                    onChanged: (v) => setState(() {
-                      pagamento = v ?? 'Contanti';
-                      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
-                        _iban.text = 'IT28F0538715206000003630167';
-                      }
-                    }),
+                    onChanged: (v) => setState(() => pagamento = v ?? 'Contanti'),
                   ),
                   if (pagamento == 'Bonifico') ...[
                     const SizedBox(height: 12),
@@ -1714,7 +1597,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
             icon: salvando
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.receipt_long_rounded),
-            label: Text(widget.fattura != null ? 'SALVA MODIFICHE E PDF' : 'CREA FATTURA E PDF'),
+            label: const Text('CREA FATTURA E PDF'),
           ),
         ],
       ),
@@ -1813,7 +1696,7 @@ class _ListaFattureScreenState extends State<ListaFattureScreen> {
               Row(children: [
                 const CircleAvatar(child: Icon(Icons.receipt_long)),
                 const SizedBox(width: 12),
-                Expanded(child: Text((f['numero'] ?? '').toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+                Expanded(child: Text((f['numero'] ?? '').toString(), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold))),
                 IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
               ]),
               const Divider(height: 24),
@@ -1833,21 +1716,6 @@ class _ListaFattureScreenState extends State<ListaFattureScreen> {
               ],
               const SizedBox(height: 8),
               Row(children: [
-                Expanded(child: OutlinedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CreaFatturaScreen(fattura: f),
-                      ),
-                    );
-                    await _carica();
-                  },
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('MODIFICA'),
-                )),
-                const SizedBox(width: 10),
                 Expanded(child: FilledButton.icon(
                   onPressed: () async {
                     await PdfGenerator.generaECondividiFattura(
@@ -1937,9 +1805,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool loading = true;
 
   static const _gold = Color(0xFFD4AF37);
-  static const _darkGold = Color(0xFF8A6200);
-  static const _pink = Color(0xFFFFE9F1);
-  static const _pinkStrong = Color(0xFFF8B8CF);
+  static const _darkGold = Color(0xFF9A7000);
+  static const _cream = Color(0xFFFFF9E8);
 
   @override
   void initState() {
@@ -1978,15 +1845,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFBFC),
       appBar: AppBar(
         title: const Text(
-          'Gestione Preventivi',
-          style: TextStyle(
-            color: Color(0xFF29211F),
-            fontWeight: FontWeight.w800,
-            letterSpacing: .2,
-          ),
+          'PREVENTIVI',
+          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
         ),
         actions: [
           IconButton(
@@ -1994,250 +1856,224 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: caricaStatistiche,
             icon: const Icon(Icons.refresh_rounded),
           ),
-          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
         color: _darkGold,
         onRefresh: caricaStatistiche,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final compact = constraints.maxHeight < 720;
-            final horizontal = constraints.maxWidth < 900 ? 24.0 : 42.0;
-            final tileHeight = compact ? 142.0 : 158.0;
-
-            return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(horizontal, 14, horizontal, 22),
-              child: Column(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.fromLTRB(
-                      20, compact ? 12 : 16, 20, compact ? 12 : 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: _gold.withValues(alpha: .55),
-                        width: 1.4,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+          children: [
+            // Azione principale sempre immediatamente disponibile.
+            Card(
+              color: _gold,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .20),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _pinkStrong.withValues(alpha: .20),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
+                      child: const Icon(
+                        Icons.receipt_long_rounded,
+                        color: Colors.white,
+                        size: 34,
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: compact ? 102 : 126,
-                            child: Image.asset(
-                              'assets/logo.png',
-                              fit: BoxFit.contain,
-                              alignment: Alignment.centerLeft,
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Gestione Preventivi',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 21,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 18),
-                        Container(
-                          width: 1,
-                          height: compact ? 72 : 92,
-                          color: _gold.withValues(alpha: .45),
-                        ),
-                        const SizedBox(width: 22),
-                        const Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'GESTIONE PREVENTIVI',
-                                style: TextStyle(
-                                  color: _darkGold,
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              SizedBox(height: 7),
-                              Text(
-                                'Tutto il tuo lavoro,\nsemplice e ordinato.',
-                                style: TextStyle(
-                                  color: Color(0xFF514644),
-                                  fontSize: 16,
-                                  height: 1.25,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                          SizedBox(height: 3),
+                          Text(
+                            'Crea e gestisci i tuoi preventivi',
+                            style: TextStyle(color: Colors.white),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: compact ? 16 : 22),
-                  _sectionHeader('GESTIONE', Icons.dashboard_customize_rounded, true),
-                  const SizedBox(height: 9),
-                  _buildMenuGrid(tileHeight),
-                  const SizedBox(height: 16),
-                  Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: const LinearGradient(
-                        colors: [_pinkStrong, _gold, _pinkStrong],
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                    IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: _darkGold,
+                        minimumSize: const Size(52, 52),
+                      ),
+                      tooltip: 'Nuovo preventivo',
+                      onPressed: () => apri(const NuovoPreventivoScreen()),
+                      icon: const Icon(Icons.add_rounded, size: 30),
+                    ),
+                  ],
+                ),
               ),
-            );
-          },
+            ),
+            const SizedBox(height: 14),
+
+            const Padding(
+              padding: EdgeInsets.only(left: 2, bottom: 8),
+              child: Text(
+                'Riepilogo e accesso rapido',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+            ),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1.38,
+              children: [
+                _statCard(
+                  Icons.receipt_long_rounded,
+                  'Preventivi',
+                  preventivi,
+                  () => apri(const ListaPreventiviScreen()),
+                ),
+                _statCard(
+                  Icons.receipt_long_rounded,
+                  'Fatture',
+                  fatture,
+                  () => apri(const ListaFattureScreen()),
+                ),
+                _statCard(
+                  Icons.people_alt_rounded,
+                  'Clienti',
+                  clienti,
+                  () => apri(const ClientiScreen()),
+                ),
+                _statCard(
+                  Icons.inventory_2_rounded,
+                  'Prodotti / Servizi',
+                  prodotti,
+                  () => apri(const ProdottiScreen()),
+                ),
+                _statCard(
+                  Icons.payments_rounded,
+                  'Acconti',
+                  acconti,
+                  () => apri(const AccontiScreen()),
+                ),
+                _actionCard(
+                  Icons.request_quote_rounded,
+                  'Crea fattura',
+                  () => apri(const CreaFatturaScreen()),
+                ),
+                _actionCard(
+                  Icons.backup_rounded,
+                  'Backup e dati',
+                  () => apri(const BackupScreen()),
+                ),
+                _actionCard(
+                  Icons.notifications_active_rounded,
+                  'Notifiche',
+                  () => apri(const NotificheScreen()),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMenuGrid(double tileHeight) {
-    final items = <_DashboardItem>[
-      _DashboardItem(
-        Icons.receipt_long_rounded,
-        'Nuovo\nPreventivo',
-        const NuovoPreventivoScreen(),
-      ),
-      _DashboardItem(
-        Icons.people_alt_rounded,
-        'Clienti',
-        const ClientiScreen(),
-      ),
-      _DashboardItem(
-        Icons.inventory_2_rounded,
-        'Prodotti /\nServizi',
-        const ProdottiScreen(),
-      ),
-      _DashboardItem(
-        Icons.list_alt_rounded,
-        'Lista\nPreventivi',
-        const ListaPreventiviScreen(),
-      ),
-      _DashboardItem(
-        Icons.payments_rounded,
-        'Acconti',
-        const AccontiScreen(),
-      ),
-      _DashboardItem(
-        Icons.receipt_rounded,
-        'Fatture',
-        const ListaFattureScreen(),
-      ),
-      _DashboardItem(
-        Icons.request_quote_rounded,
-        'Crea\nFattura',
-        const CreaFatturaScreen(),
-      ),
-      _DashboardItem(
-        Icons.settings_rounded,
-        'Gestione\nDati',
-        const BackupScreen(),
-      ),
-      _DashboardItem(
-        Icons.notifications_active_rounded,
-        'Notifiche',
-        const NotificheScreen(),
-      ),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1100
-            ? 4
-            : constraints.maxWidth >= 700
-                ? 3
-                : 2;
-        final gap = 14.0;
-        final width =
-            (constraints.maxWidth - gap * (columns - 1)) / columns;
-
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          alignment: WrapAlignment.center,
-          children: items.map((item) {
-            return SizedBox(
-              width: width,
-              height: tileHeight,
-              child: _menuTile(item),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-
-  Widget _menuTile(_DashboardItem item) {
-    return Material(
+  Widget _statCard(
+    IconData icon,
+    String label,
+    int value,
+    VoidCallback onTap,
+  ) {
+    return Card(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => apri(item.page),
-        hoverColor: _pink,
-        splashColor: _pinkStrong.withValues(alpha: .20),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _gold.withValues(alpha: .72),
-              width: 1.4,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: .07),
-                blurRadius: 12,
-                offset: const Offset(0, 5),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: _cream,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: _darkGold, size: 29),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      loading ? '…' : '$value',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionCard(IconData icon, String title, VoidCallback onTap) {
+    return Card(
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 62,
-                height: 62,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [_gold, _darkGold],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _gold.withValues(alpha: .25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  color: _cream,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(item.icon, color: Colors.white, size: 31),
+                child: Icon(icon, size: 31, color: _darkGold),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Text(
-                item.label,
+                title,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Color(0xFF29211F),
-                  fontSize: 15,
-                  height: 1.12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
                 ),
               ),
             ],
@@ -2246,33 +2082,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-
-  Widget _sectionHeader(String title, IconData icon, bool prominent) {
-    return Row(
-      children: [
-        Icon(icon, color: _darkGold, size: prominent ? 25 : 22),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: TextStyle(
-            color: _darkGold,
-            fontSize: prominent ? 20 : 18,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.0,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
-class _DashboardItem {
-  final IconData icon;
-  final String label;
-  final Widget page;
-
-  const _DashboardItem(this.icon, this.label, this.page);
-}
 
 Future<String?> selezionaCliente(BuildContext context) async {
   final clienti = await DatabaseHelper.instance.getClienti();
@@ -2433,6 +2244,7 @@ class NuovoPreventivoScreen extends StatefulWidget {
 }
 
 class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
+  final numeroController = TextEditingController();
   final clienteController = TextEditingController();
   final prodottoController = TextEditingController();
   final prezzoController = TextEditingController();
@@ -2446,6 +2258,10 @@ class _NuovoPreventivoScreenState extends State<NuovoPreventivoScreen> {
   bool accettato = false;
   bool pagato = false;
   bool busy = false;
+
+  // Indice della riga che si sta modificando.
+  // null = inserimento di una nuova riga.
+  int? indiceArticoloInModifica;
 
   double get imponibile => articoli.fold<double>(
         0,
@@ -2620,7 +2436,21 @@ Future<void> aggiungiAcconto() async {
   double get saldoResiduo => totale - totaleAcconti;
 
   @override
+  void initState() {
+    super.initState();
+    _impostaNumeroProgressivo();
+  }
+
+  Future<void> _impostaNumeroProgressivo() async {
+    final numero = await DatabaseHelper.instance.prossimoNumeroPreventivo();
+    if (mounted && numeroController.text.trim().isEmpty) {
+      setState(() => numeroController.text = numero);
+    }
+  }
+
+  @override
   void dispose() {
+    numeroController.dispose();
     clienteController.dispose();
     prodottoController.dispose();
     prezzoController.dispose();
@@ -2647,7 +2477,23 @@ Future<void> aggiungiAcconto() async {
     }
 
     setState(() {
-      articoli.add({'nome': nome, 'prezzo': prezzo, 'quantita': quantita});
+      final articolo = {
+        'nome': nome,
+        'prezzo': prezzo,
+        'quantita': quantita,
+      };
+
+      if (indiceArticoloInModifica != null &&
+          indiceArticoloInModifica! >= 0 &&
+          indiceArticoloInModifica! < articoli.length) {
+        // Modifica una riga già presente nel preventivo.
+        articoli[indiceArticoloInModifica!] = articolo;
+      } else {
+        // Inserimento di una nuova riga.
+        articoli.add(articolo);
+      }
+
+      indiceArticoloInModifica = null;
       prodottoController.clear();
       prezzoController.clear();
       quantitaController.text = '1';
@@ -2657,12 +2503,13 @@ Future<void> aggiungiAcconto() async {
   Future<void> generaPreventivo() async {
     if (busy) return;
 
+    final numero = numeroController.text.trim();
     final cliente = clienteController.text.trim();
 
-    if (cliente.isEmpty || articoli.isEmpty) {
+    if (numero.isEmpty || cliente.isEmpty || articoli.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Inserisci il cliente e almeno un prodotto.'),
+          content: Text('Inserisci numero preventivo, cliente e almeno un prodotto.'),
         ),
       );
       return;
@@ -2672,19 +2519,18 @@ Future<void> aggiungiAcconto() async {
 
     try {
       final db = DatabaseHelper.instance;
-      final numero = await db.prossimoNumeroPreventivo();
 
-      // Se l'utente seleziona "Pagato", il preventivo viene considerato
-      // saldato indipendentemente dagli eventuali acconti inseriti.
-      // Gli acconti restano comunque salvati come storico.
+      // Se gli acconti coprono interamente il totale, il preventivo è PAGATO.
+      // Gli acconti restano salvati e visibili come storico dei pagamenti.
       final accontiDaSalvare = List<Map<String, dynamic>>.from(acconti);
       final totaleAcconti = accontiDaSalvare.fold<double>(
         0,
         (sum, a) => sum + ((a['importo'] as num?)?.toDouble() ?? 0),
       );
-      final pagatoEffettivo = pagato || (totale - totaleAcconti <= 0.005);
+      final pagatoFinale = pagato || (totale - totaleAcconti <= 0.005);
+      // Non cancellare gli acconti: devono rimanere nello storico e nel PDF.
 
-      await db.insertPreventivo(
+      final id = await db.insertPreventivo(
         numero: numero,
         cliente: cliente,
         totale: totale,
@@ -2693,7 +2539,7 @@ Future<void> aggiungiAcconto() async {
         accettato: accettato,
         acconti: accontiDaSalvare,
         scontoPercent: scontoPercent,
-        pagato: pagatoEffettivo,
+        pagato: pagatoFinale,
       );
 
       final clienti = await db.getClienti();
@@ -2714,7 +2560,7 @@ Future<void> aggiungiAcconto() async {
         accettato: accettato,
         acconti: acconti,
         scontoPercent: scontoPercent,
-        pagato: pagatoEffettivo,
+        pagato: pagatoFinale,
       );
 
       if (mounted) {
@@ -2733,105 +2579,6 @@ Future<void> aggiungiAcconto() async {
       if (mounted) {
         setState(() => busy = false);
       }
-    }
-  }
-
-  Future<void> modificaArticolo(int index) async {
-    final articolo = articoli[index];
-    final nomeController = TextEditingController(
-      text: (articolo['nome'] ?? '').toString(),
-    );
-    final prezzoControllerModifica = TextEditingController(
-      text: ((articolo['prezzo'] as num?)?.toDouble() ?? 0)
-          .toStringAsFixed(2),
-    );
-    final quantitaControllerModifica = TextEditingController(
-      text: ((articolo['quantita'] as num?)?.toDouble() ?? 1)
-          .toStringAsFixed(2),
-    );
-
-    try {
-      final risultato = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Modifica prodotto / servizio'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nomeController,
-                  decoration: const InputDecoration(
-                    labelText: 'Descrizione',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: quantitaControllerModifica,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Quantità',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: prezzoControllerModifica,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Prezzo unitario €',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('ANNULLA'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final nome = nomeController.text.trim();
-                final prezzo = double.tryParse(
-                  prezzoControllerModifica.text.trim().replaceAll(',', '.'),
-                );
-                final quantita = double.tryParse(
-                  quantitaControllerModifica.text.trim().replaceAll(',', '.'),
-                );
-
-                if (nome.isEmpty ||
-                    prezzo == null ||
-                    prezzo < 0 ||
-                    quantita == null ||
-                    quantita <= 0) {
-                  return;
-                }
-
-                Navigator.pop(dialogContext, {
-                  'nome': nome,
-                  'prezzo': prezzo,
-                  'quantita': quantita,
-                });
-              },
-              child: const Text('SALVA'),
-            ),
-          ],
-        ),
-      );
-
-      if (risultato != null && mounted) {
-        setState(() {
-          articoli[index] = risultato;
-        });
-      }
-    } finally {
-      nomeController.dispose();
-      prezzoControllerModifica.dispose();
-      quantitaControllerModifica.dispose();
     }
   }
 
@@ -2870,6 +2617,15 @@ Future<void> aggiungiAcconto() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            TextField(
+              controller: numeroController,
+              decoration: const InputDecoration(
+                labelText: 'Numero preventivo',
+                prefixIcon: Icon(Icons.numbers),
+                helperText: 'Numero modificabile anche dopo il salvataggio',
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'Dati Cliente',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -2898,6 +2654,33 @@ Future<void> aggiungiAcconto() async {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
+            if (indiceArticoloInModifica != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.edit_outlined, size: 18),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                      child: Text(
+                        'Modifica prodotto, prezzo o quantità e premi ✓',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          indiceArticoloInModifica = null;
+                          prodottoController.clear();
+                          prezzoController.clear();
+                          quantitaController.text = '1';
+                        });
+                      },
+                      child: const Text('ANNULLA'),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2947,7 +2730,11 @@ Future<void> aggiungiAcconto() async {
               child: OutlinedButton.icon(
                 onPressed: scegliServizio,
                 icon: const Icon(Icons.inventory_2_outlined),
-                label: const Text('SCEGLI DA PRODOTTI / SERVIZI'),
+                label: Text(
+                  indiceArticoloInModifica == null
+                      ? 'SCEGLI DA PRODOTTI / SERVIZI'
+                      : 'SOSTITUISCI CON UN PRODOTTO / SERVIZIO',
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -2964,15 +2751,57 @@ Future<void> aggiungiAcconto() async {
                     final quantita = (articoli[i]['quantita'] as num?)?.toDouble() ?? 1;
                     final riga = prezzo * quantita;
                     return ListTile(
+                      onTap: () {
+                        // Carica la riga nei campi sopra per poter modificare
+                        // descrizione/prodotto, prezzo e quantità.
+                        setState(() {
+                          indiceArticoloInModifica = i;
+                          prodottoController.text =
+                              articoli[i]['nome'].toString();
+                          prezzoController.text =
+                              prezzo.toStringAsFixed(2);
+                          quantitaController.text =
+                              quantita.toString().replaceAll('.', ',');
+                        });
+                      },
                       title: Text(articoli[i]['nome'].toString()),
                       subtitle: Text(
                         'Quantità: ${quantita.toStringAsFixed(2)}  •  Prezzo unitario: € ${prezzo.toStringAsFixed(2)}  •  Totale: € ${riga.toStringAsFixed(2)}',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () {
-                          setState(() => articoli.removeAt(i));
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Modifica prodotto e prezzo',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () {
+                              setState(() {
+                                indiceArticoloInModifica = i;
+                                prodottoController.text =
+                                    articoli[i]['nome'].toString();
+                                prezzoController.text =
+                                    prezzo.toStringAsFixed(2);
+                                quantitaController.text =
+                                    quantita.toString().replaceAll('.', ',');
+                              });
+                            },
+                          ),
+                          IconButton(
+                            tooltip: 'Elimina',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () {
+                              setState(() {
+                                if (indiceArticoloInModifica == i) {
+                                  indiceArticoloInModifica = null;
+                                  prodottoController.clear();
+                                  prezzoController.clear();
+                                  quantitaController.text = '1';
+                                }
+                                articoli.removeAt(i);
+                              });
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -3050,7 +2879,7 @@ Future<void> aggiungiAcconto() async {
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                         OutlinedButton.icon(
-                          onPressed: pagato ? null : aggiungiAcconto,
+                          onPressed: aggiungiAcconto,
                           icon: const Icon(Icons.add),
                           label: const Text('AGGIUNGI'),
                         ),
@@ -3119,14 +2948,9 @@ Future<void> aggiungiAcconto() async {
                   'Pagato',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-                subtitle: const Text(
-                  'Considera il preventivo completamente pagato e bypassa il calcolo degli acconti.',
-                ),
-                secondary: const Icon(Icons.paid_outlined),
                 controlAffinity: ListTileControlAffinity.leading,
               ),
             ),
-            const SizedBox(height: 12),
             Card(
               child: CheckboxListTile(
                 value: accettato,
@@ -3620,6 +3444,10 @@ class _ModificaPreventivoScreenState
 
   bool busy = false;
 
+  // Indice della riga che si sta modificando.
+  // null = inserimento di una nuova riga.
+  int? indiceArticoloInModifica;
+
   double get imponibile => articoli.fold<double>(
         0,
         (sum, x) {
@@ -3846,6 +3674,8 @@ Future<void> aggiungiAcconto() async {
         0, (sum, a) => sum + ((a['importo'] as num?)?.toDouble() ?? 0));
   double get saldoResiduo => totale - totaleAcconti;
 
+  String get numero => numeroController.text.trim();
+
   @override
   void initState() {
     super.initState();
@@ -3913,7 +3743,21 @@ Future<void> aggiungiAcconto() async {
     }
 
     setState(() {
-      articoli.add({'nome': nome, 'prezzo': prezzo, 'quantita': quantita});
+      final articolo = {
+        'nome': nome,
+        'prezzo': prezzo,
+        'quantita': quantita,
+      };
+
+      if (indiceArticoloInModifica != null &&
+          indiceArticoloInModifica! >= 0 &&
+          indiceArticoloInModifica! < articoli.length) {
+        articoli[indiceArticoloInModifica!] = articolo;
+      } else {
+        articoli.add(articolo);
+      }
+
+      indiceArticoloInModifica = null;
       prodottoController.clear();
       prezzoController.clear();
       quantitaController.text = '1';
@@ -3923,10 +3767,9 @@ Future<void> aggiungiAcconto() async {
   Future<void> salva() async {
     if (busy) return;
 
-    final numero = numeroController.text.trim();
     final cliente = clienteController.text.trim();
 
-    if (numero.isEmpty || cliente.isEmpty || articoli.isEmpty) {
+    if (cliente.isEmpty || articoli.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Inserisci il cliente e almeno un prodotto.'),
@@ -3942,14 +3785,12 @@ Future<void> aggiungiAcconto() async {
       final preventivoId =
           (widget.preventivo['id'] as num).toInt();
 
-      // "Pagato" bypassa il calcolo degli acconti: il preventivo viene
-      // considerato saldato anche se il totale degli acconti è inferiore.
-      // Gli eventuali acconti restano comunque nello storico.
+      // Se il saldo è stato azzerato, mantieni gli acconti come storico.
       final totaleAcconti = acconti.fold<double>(
         0,
         (sum, a) => sum + ((a['importo'] as num?)?.toDouble() ?? 0),
       );
-      final pagatoEffettivo = pagato || (totale - totaleAcconti <= 0.005);
+      final pagatoFinale = pagato || (totale - totaleAcconti <= 0.005);
       final updated = await db.updatePreventivo(
         id: preventivoId,
         numero: numero,
@@ -3960,7 +3801,7 @@ Future<void> aggiungiAcconto() async {
         accettato: accettato,
         acconti: acconti,
         scontoPercent: scontoPercent,
-        pagato: pagatoEffettivo,
+        pagato: pagatoFinale,
       );
 
       if (updated == 0) {
@@ -3975,7 +3816,7 @@ Future<void> aggiungiAcconto() async {
         accettato: accettato,
         acconti: acconti,
         scontoPercent: scontoPercent,
-        pagato: pagatoEffettivo,
+        pagato: pagatoFinale,
       );
 
       if (mounted) {
@@ -4016,110 +3857,11 @@ Future<void> aggiungiAcconto() async {
     );
   }
 
-  Future<void> modificaArticolo(int index) async {
-    final articolo = articoli[index];
-    final nomeController = TextEditingController(
-      text: (articolo['nome'] ?? '').toString(),
-    );
-    final prezzoControllerModifica = TextEditingController(
-      text: ((articolo['prezzo'] as num?)?.toDouble() ?? 0)
-          .toStringAsFixed(2),
-    );
-    final quantitaControllerModifica = TextEditingController(
-      text: ((articolo['quantita'] as num?)?.toDouble() ?? 1)
-          .toStringAsFixed(2),
-    );
-
-    try {
-      final risultato = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Modifica prodotto / servizio'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nomeController,
-                  decoration: const InputDecoration(
-                    labelText: 'Descrizione',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: quantitaControllerModifica,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Quantità',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: prezzoControllerModifica,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Prezzo unitario €',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('ANNULLA'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final nome = nomeController.text.trim();
-                final prezzo = double.tryParse(
-                  prezzoControllerModifica.text.trim().replaceAll(',', '.'),
-                );
-                final quantita = double.tryParse(
-                  quantitaControllerModifica.text.trim().replaceAll(',', '.'),
-                );
-
-                if (nome.isEmpty ||
-                    prezzo == null ||
-                    prezzo < 0 ||
-                    quantita == null ||
-                    quantita <= 0) {
-                  return;
-                }
-
-                Navigator.pop(dialogContext, {
-                  'nome': nome,
-                  'prezzo': prezzo,
-                  'quantita': quantita,
-                });
-              },
-              child: const Text('SALVA'),
-            ),
-          ],
-        ),
-      );
-
-      if (risultato != null && mounted) {
-        setState(() {
-          articoli[index] = risultato;
-        });
-      }
-    } finally {
-      nomeController.dispose();
-      prezzoControllerModifica.dispose();
-      quantitaControllerModifica.dispose();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Modifica ${widget.preventivo['numero']}'),
+        title: Text('Modifica preventivo'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),
@@ -4128,17 +3870,18 @@ Future<void> aggiungiAcconto() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Dati Cliente',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
             TextField(
               controller: numeroController,
               decoration: const InputDecoration(
                 labelText: 'Numero preventivo',
                 prefixIcon: Icon(Icons.numbers),
+                helperText: 'Numero modificabile anche dopo il salvataggio',
               ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Dati Cliente',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -4201,8 +3944,15 @@ Future<void> aggiungiAcconto() async {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
+                  tooltip: indiceArticoloInModifica == null
+                      ? 'Aggiungi prodotto'
+                      : 'Salva modifica',
                   onPressed: aggiungi,
-                  icon: const Icon(Icons.add),
+                  icon: Icon(
+                    indiceArticoloInModifica == null
+                        ? Icons.add
+                        : Icons.check,
+                  ),
                 ),
               ],
             ),
@@ -4233,19 +3983,41 @@ Future<void> aggiungiAcconto() async {
                       subtitle: Text(
                         'Quantità: ${quantita.toStringAsFixed(2)}  •  Prezzo unitario: € ${prezzo.toStringAsFixed(2)}  •  Totale: € ${riga.toStringAsFixed(2)}',
                       ),
+                      onTap: () {
+                        setState(() {
+                          indiceArticoloInModifica = i;
+                          prodottoController.text = articoli[i]['nome'].toString();
+                          prezzoController.text = prezzo.toStringAsFixed(2);
+                          quantitaController.text = quantita.toString().replaceAll('.', ',');
+                        });
+                      },
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: 'Modifica prodotto / prezzo',
+                            tooltip: 'Modifica prodotto, prezzo e quantità',
                             icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => modificaArticolo(i),
+                            onPressed: () {
+                              setState(() {
+                                indiceArticoloInModifica = i;
+                                prodottoController.text = articoli[i]['nome'].toString();
+                                prezzoController.text = prezzo.toStringAsFixed(2);
+                                quantitaController.text = quantita.toString().replaceAll('.', ',');
+                              });
+                            },
                           ),
                           IconButton(
-                            tooltip: 'Elimina prodotto',
                             icon: const Icon(Icons.delete_outline),
                             onPressed: () {
-                              setState(() => articoli.removeAt(i));
+                              setState(() {
+                                if (indiceArticoloInModifica == i) {
+                                  indiceArticoloInModifica = null;
+                                  prodottoController.clear();
+                                  prezzoController.clear();
+                                  quantitaController.text = '1';
+                                }
+                                articoli.removeAt(i);
+                              });
                             },
                           ),
                         ],
@@ -4323,7 +4095,7 @@ Future<void> aggiungiAcconto() async {
                       children: [
                         const Text('Acconti', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                         OutlinedButton.icon(
-                          onPressed: pagato ? null : aggiungiAcconto,
+                          onPressed: aggiungiAcconto,
                           icon: const Icon(Icons.add),
                           label: const Text('AGGIUNGI'),
                         ),
@@ -4382,8 +4154,7 @@ Future<void> aggiungiAcconto() async {
               ),
             ),
             const SizedBox(height: 12),
-            // Questo controllo deve restare visibile anche sui vecchi preventivi
-            // già generati: lo stato viene letto dal campo pagato del database.
+            const SizedBox(height: 12),
             Card(
               child: CheckboxListTile(
                 value: pagato,
@@ -4392,14 +4163,9 @@ Future<void> aggiungiAcconto() async {
                   'Pagato',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-                subtitle: const Text(
-                  'Considera il preventivo completamente pagato e bypassa il calcolo degli acconti.',
-                ),
-                secondary: const Icon(Icons.paid_outlined),
                 controlAffinity: ListTileControlAffinity.leading,
               ),
             ),
-            const SizedBox(height: 12),
             Card(
               child: CheckboxListTile(
                 value: accettato,
@@ -5328,7 +5094,7 @@ class _BackupScreenState extends State<BackupScreen> {
         builder: (context) => AlertDialog(
           title: const Text('Importa backup'),
           content: const Text(
-            'L’importazione aggiornerà i dati presenti e aggiungerà quelli nuovi. I dati che non sono nel backup non verranno cancellati. Continuare?',
+            'L’importazione aggiornerà i dati presenti nel backup e manterrà quelli già presenti sul dispositivo. Continuare?',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ANNULLA')),
@@ -5395,6 +5161,7 @@ class _BackupScreenState extends State<BackupScreen> {
           ],
           if (lastMessage != null) ...[
             const SizedBox(height: 20),
+            const SizedBox(height: 16),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -5404,7 +5171,7 @@ class _BackupScreenState extends State<BackupScreen> {
           ],
           const SizedBox(height: 18),
           const Text(
-            'Il backup contiene clienti, prodotti/servizi, preventivi e acconti. L’importazione aggiorna i dati esistenti e aggiunge quelli nuovi, senza cancellare i dati già presenti sul dispositivo.',
+            'Il backup contiene clienti, prodotti/servizi, preventivi e acconti. L’importazione è incrementale: aggiorna i dati con lo stesso ID e aggiunge quelli nuovi, senza cancellare i dati già presenti.',
             style: TextStyle(fontSize: 13),
           ),
         ],
