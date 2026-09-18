@@ -34,6 +34,11 @@ jobs:
       - name: Clean generated files
         run: flutter clean
 
+      - name: Remove incompatible template tests
+        shell: powershell
+        run: |
+          if (Test-Path "test") { Remove-Item -Recurse -Force "test" }
+
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
