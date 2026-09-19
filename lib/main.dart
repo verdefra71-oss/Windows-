@@ -1351,6 +1351,9 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       _iva.text = ((f['iva_percent'] as num?)?.toDouble() ?? 0).toString();
       pagamento = (f['pagamento'] ?? 'Contanti').toString();
       _iban.text = (f['iban'] ?? '').toString();
+      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
+        _iban.text = 'IT72R0357601601010002078806';
+      }
       try {
         final raw = jsonDecode((f['articoli'] ?? '[]').toString());
         if (raw is List) {
@@ -1661,9 +1664,9 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                     ],
                     onChanged: (v) => setState(() {
                       pagamento = v ?? 'Contanti';
-                      // Per il bonifico l'IBAN non viene più precompilato:
-                      // deve essere inserito/digitato manualmente dall'utente.
-                      if (pagamento != 'Bonifico') {
+                      if (pagamento == 'Bonifico') {
+                        _iban.text = 'IT72R0357601601010002078806';
+                      } else {
                         _iban.clear();
                       }
                     }),
