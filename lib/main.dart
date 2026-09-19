@@ -1278,10 +1278,13 @@ class PdfGenerator {
               children: [
                 pw.Text('DATI AZIENDA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: gold)),
                 pw.SizedBox(height: 4),
-                pw.Text('di CARPENTIERI ALFONSO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('Sede legale: via Ugo Pirro, 9 - 84100 Salerno'),
-                pw.Text('Cell. 328 697 2865'),
-                pw.Text('P. IVA 06051430657'),
+                pw.Text('Verde Emanuele', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('Via Mario Francesco Pagano, 8 - 80022 Arzano (NA)'),
+                pw.Text('C.F. VRDMNL76H22F839Q'),
+                pw.Text('P. IVA 06089401217'),
+                pw.Text('Cell. 333 179 8874'),
+                pw.Text('Email: verdeemanuele@gmail.com'),
+                pw.Text('PEC: verdeemanuele@pec.it'),
               ],
             ),
           ),
@@ -1293,10 +1296,10 @@ class PdfGenerator {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text('Metodo di pagamento: $pagamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                if (pagamento == 'Bonifico')
+                if (pagamento == 'Bonifico' && (iban ?? '').trim().isNotEmpty)
                   pw.Padding(
                     padding: const pw.EdgeInsets.only(top: 4),
-                    child: pw.Text('IBAN: ${((iban ?? '').trim().isEmpty ? 'IT28F0538715206000003630167' : iban!.trim())}'),
+                    child: pw.Text('IBAN: ${iban!.trim()}'),
                   ),
               ],
             ),
@@ -1494,9 +1497,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
         articoli: articoli,
         ivaPercent: ivaPercent,
         pagamento: pagamento,
-        iban: pagamento == 'Bonifico'
-            ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
-            : null,
+        iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1660,8 +1661,10 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                     ],
                     onChanged: (v) => setState(() {
                       pagamento = v ?? 'Contanti';
-                      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
-                        _iban.text = 'IT28F0538715206000003630167';
+                      // Per il bonifico l'IBAN non viene più precompilato:
+                      // deve essere inserito/digitato manualmente dall'utente.
+                      if (pagamento != 'Bonifico') {
+                        _iban.clear();
                       }
                     }),
                   ),
