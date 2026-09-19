@@ -1,6 +1,6 @@
 # Preventivi
 
-App Flutter per gestione di clienti, prodotti/servizi, preventivi, IVA, acconti e notifiche.
+App Flutter per gestione di clienti, prodotti/servizi, preventivi, IVA, acconti.
 
 ## Build APK su GitHub Actions
 
@@ -30,12 +30,20 @@ Repository → Settings → Secrets and variables → Actions → New repository
 
 Il Bundle ID deve corrispondere esattamente al provisioning profile e all'app registrata in App Store Connect. Apple richiede un Apple Developer Program per distribuire l'app; il workflow usa un runner macOS e il certificato/provisioning profile per la firma. Dopo l'upload, il build appare in App Store Connect e può essere distribuito tramite TestFlight o sottoposto all'App Store.
 
-## Versione Windows
-Il progetto include il target desktop Windows. La versione Windows usa SQLite tramite
-`sqflite_common_ffi` e non attiva i promemoria locali degli acconti.
-Per creare l'eseguibile su un ambiente Windows con Flutter:
-`flutter pub get`
-`flutter build windows --release`
 
+## Build Windows
 
-Windows build note: the GitHub workflow regenerates the Windows platform folder with the installed Flutter SDK before building. This avoids committing Flutter ephemeral C++ wrapper files or stale CMake templates.
+Il progetto include il workflow `.github/workflows/build-windows.yml`.
+
+Il workflow:
+1. prepara automaticamente il progetto Windows;
+2. installa le dipendenze;
+3. esegue l'analisi;
+4. crea la build Windows Release;
+5. produce un archivio portatile;
+6. crea `Gestione-Preventivi-Setup.exe` con Inno Setup.
+
+In GitHub: **Actions → Build Preventivi Windows → Run workflow**.
+Al termine scarica l'artifact **Gestione-Preventivi-Windows**.
+
+La versione Windows utilizza SQLite tramite FFI, quindi mantiene il database locale dell'app senza richiedere un server.

@@ -32,5 +32,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/app_icon.png
     - assets/fonts/DejaVuSans.ttf
     - assets/fonts/DejaVuSans-Bold.ttf
