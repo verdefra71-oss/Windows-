@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1278,13 +1279,10 @@ class PdfGenerator {
               children: [
                 pw.Text('DATI AZIENDA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: gold)),
                 pw.SizedBox(height: 4),
-                pw.Text('Verde Emanuele', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('Via Mario Francesco Pagano, 8 - 80022 Arzano (NA)'),
-                pw.Text('C.F. VRDMNL76H22F839Q'),
-                pw.Text('P. IVA 06089401217'),
-                pw.Text('Cell. 333 179 8874'),
-                pw.Text('Email: verdeemanuele@gmail.com'),
-                pw.Text('PEC: verdeemanuele@pec.it'),
+                pw.Text('di CARPENTIERI ALFONSO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('Sede legale: via Ugo Pirro, 9 - 84100 Salerno'),
+                pw.Text('Cell. 328 697 2865'),
+                pw.Text('P. IVA 06051430657'),
               ],
             ),
           ),
@@ -1296,10 +1294,10 @@ class PdfGenerator {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text('Metodo di pagamento: $pagamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                if (pagamento == 'Bonifico' && (iban ?? '').trim().isNotEmpty)
+                if (pagamento == 'Bonifico')
                   pw.Padding(
                     padding: const pw.EdgeInsets.only(top: 4),
-                    child: pw.Text('IBAN: ${iban!.trim()}'),
+                    child: pw.Text('IBAN: ${((iban ?? '').trim().isEmpty ? 'IT28F0538715206000003630167' : iban!.trim())}'),
                   ),
               ],
             ),
@@ -1308,10 +1306,41 @@ class PdfGenerator {
       ),
     );
 
-    await Printing.sharePdf(
-      bytes: await pdf.save(),
-      filename: 'Fattura_Pro-Forma_$numero.pdf',
+    final pdfBytes = await pdf.save();
+    final safeNumero = numero.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final filename = 'Fattura_Pro-Forma_$safeNumero.pdf';
+
+    // Su Windows la condivisione nativa di Printing può fallire in alcune
+    // configurazioni desktop. Salviamo quindi direttamente il PDF e lo
+    // apriamo con il programma PDF predefinito di Windows.
+    if (Platform.isWindows) {
+      Directory? downloads;
+      try {
+        downloads = await getDownloadsDirectory();
+      } catch (_) {}
+      final directory = downloads ?? await getApplicationDocumentsDirectory();
+      final file = File(p.join(directory.path, filename));
+      await file.writeAsBytes(pdfBytes, flush: true);
+
+      final result = await Process.run(
+        'explorer.exe',
+        [file.path],
+        runInShell: false,
+      );
+      if (result.exitCode != 0) {
+        throw Exception('PDF creato in: ${file.path}');
+      }
+      return;
+    }
+
+    // Su Android/iOS mantiene la condivisione del PDF.
+    final condiviso = await Printing.sharePdf(
+      bytes: pdfBytes,
+      filename: filename,
     );
+    if (!condiviso) {
+      throw Exception('PDF creato, ma la condivisione non è stata aperta.');
+    }
   }
 
 }
@@ -1351,9 +1380,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       _iva.text = ((f['iva_percent'] as num?)?.toDouble() ?? 0).toString();
       pagamento = (f['pagamento'] ?? 'Contanti').toString();
       _iban.text = (f['iban'] ?? '').toString();
-      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
-        _iban.text = 'IT72R0357601601010002078806';
-      }
       try {
         final raw = jsonDecode((f['articoli'] ?? '[]').toString());
         if (raw is List) {
@@ -1500,7 +1526,9 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
         articoli: articoli,
         ivaPercent: ivaPercent,
         pagamento: pagamento,
-        iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
+        iban: pagamento == 'Bonifico'
+            ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
+            : null,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1664,10 +1692,8 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                     ],
                     onChanged: (v) => setState(() {
                       pagamento = v ?? 'Contanti';
-                      if (pagamento == 'Bonifico') {
-                        _iban.text = 'IT72R0357601601010002078806';
-                      } else {
-                        _iban.clear();
+                      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
+                        _iban.text = 'IT28F0538715206000003630167';
                       }
                     }),
                   ),
