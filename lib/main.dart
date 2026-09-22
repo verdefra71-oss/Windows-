@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -564,33 +563,30 @@ CREATE TABLE fatture (
     required String pagamento,
     String? iban,
   }) async {
-    final db = await database;
-    final values = {
-      'numero': numero,
-      'cliente': cliente,
-      'articoli': jsonEncode(articoli),
-      'iva_percent': ivaPercent,
-      'totale': totale,
-      'pagamento': pagamento,
-      'iban': iban,
-    };
-    var result = await db.update('fatture', values, where: 'id = ?', whereArgs: [id]);
-    // Backup/importazioni precedenti possono aver ricreato la riga con un id diverso.
-    // In quel caso usiamo il numero originale come secondo identificatore.
-    if (result == 0) {
-      throw StateError('La fattura non esiste più nel database. Aggiorna la lista e riprova.');
-    }
+    final result = await (await database).update(
+      'fatture',
+      {
+        'numero': numero,
+        'cliente': cliente,
+        'articoli': jsonEncode(articoli),
+        'iva_percent': ivaPercent,
+        'totale': totale,
+        'pagamento': pagamento,
+        'iban': iban,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     await autoBackup();
     return result;
   }
 
   Future<int> deleteFattura(int id) async {
-    final db = await database;
-    final result = await db.delete('fatture', where: 'id = ?', whereArgs: [id]);
-    if (result == 0) {
-      throw StateError('La fattura non esiste più nel database. Aggiorna la lista e riprova.');
-    }
-    // Il backup non deve mai impedire la cancellazione già eseguita.
+    final result = await (await database).delete(
+      'fatture',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     await autoBackup();
     return result;
   }
@@ -1282,10 +1278,13 @@ class PdfGenerator {
               children: [
                 pw.Text('DATI AZIENDA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: gold)),
                 pw.SizedBox(height: 4),
-                pw.Text('di CARPENTIERI ALFONSO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('Sede legale: via Ugo Pirro, 9 - 84100 Salerno'),
-                pw.Text('Cell. 328 697 2865'),
-                pw.Text('P. IVA 06051430657'),
+                pw.Text('Verde Emanuele', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('Via Mario Francesco Pagano, 8 - 80022 Arzano (NA)'),
+                pw.Text('C.F. VRDMNL76H22F839Q'),
+                pw.Text('P. IVA 06089401217'),
+                pw.Text('Cell. 333 179 8874'),
+                pw.Text('Email: verdeemanuele@gmail.com'),
+                pw.Text('PEC: verdeemanuele@pec.it'),
               ],
             ),
           ),
@@ -1297,10 +1296,10 @@ class PdfGenerator {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text('Metodo di pagamento: $pagamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                if (pagamento == 'Bonifico')
+                if (pagamento == 'Bonifico' && (iban ?? '').trim().isNotEmpty)
                   pw.Padding(
                     padding: const pw.EdgeInsets.only(top: 4),
-                    child: pw.Text('IBAN: ${((iban ?? '').trim().isEmpty ? 'IT28F0538715206000003630167' : iban!.trim())}'),
+                    child: pw.Text('IBAN: ${iban!.trim()}'),
                   ),
               ],
             ),
@@ -1309,41 +1308,10 @@ class PdfGenerator {
       ),
     );
 
-    final pdfBytes = await pdf.save();
-    final safeNumero = numero.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-    final filename = 'Fattura_Pro-Forma_$safeNumero.pdf';
-
-    // Su Windows la condivisione nativa di Printing può fallire in alcune
-    // configurazioni desktop. Salviamo quindi direttamente il PDF e lo
-    // apriamo con il programma PDF predefinito di Windows.
-    if (Platform.isWindows) {
-      Directory? downloads;
-      try {
-        downloads = await getDownloadsDirectory();
-      } catch (_) {}
-      final directory = downloads ?? await getApplicationDocumentsDirectory();
-      final file = File(p.join(directory.path, filename));
-      await file.writeAsBytes(pdfBytes, flush: true);
-
-      final result = await Process.run(
-        'explorer.exe',
-        [file.path],
-        runInShell: false,
-      );
-      if (result.exitCode != 0) {
-        throw Exception('PDF creato in: ${file.path}');
-      }
-      return;
-    }
-
-    // Su Android/iOS mantiene la condivisione del PDF.
-    final condiviso = await Printing.sharePdf(
-      bytes: pdfBytes,
-      filename: filename,
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'Fattura_Pro-Forma_$numero.pdf',
     );
-    if (!condiviso) {
-      throw Exception('PDF creato, ma la condivisione non è stata aperta.');
-    }
   }
 
 }
@@ -1383,6 +1351,9 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       _iva.text = ((f['iva_percent'] as num?)?.toDouble() ?? 0).toString();
       pagamento = (f['pagamento'] ?? 'Contanti').toString();
       _iban.text = (f['iban'] ?? '').toString();
+      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
+        _iban.text = 'IT72R0357601601010002078806';
+      }
       try {
         final raw = jsonDecode((f['articoli'] ?? '[]').toString());
         if (raw is List) {
@@ -1423,38 +1394,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
 
   double get ivaPercent => double.tryParse(_iva.text.replaceAll(',', '.')) ?? 0;
   double get totale => imponibile + imponibile * ivaPercent / 100;
-
-  Future<void> _modificaProdotto(int index) async {
-    final a = articoli[index];
-    final nome = TextEditingController(text: (a['nome'] ?? '').toString());
-    final prezzo = TextEditingController(text: ((a['prezzo'] as num?)?.toDouble() ?? 0).toString());
-    final quantita = TextEditingController(text: ((a['quantita'] as num?)?.toDouble() ?? 1).toString());
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Modifica prodotto / servizio'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nome, decoration: const InputDecoration(labelText: 'Descrizione')),
-          const SizedBox(height: 10),
-          TextField(controller: prezzo, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Prezzo unitario €')),
-          const SizedBox(height: 10),
-          TextField(controller: quantita, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Quantità')),
-        ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ANNULLA')),
-          FilledButton(onPressed: () {
-            final n = nome.text.trim();
-            final pr = double.tryParse(prezzo.text.replaceAll(',', '.')) ?? 0;
-            final q = double.tryParse(quantita.text.replaceAll(',', '.')) ?? 1;
-            if (n.isEmpty || pr < 0 || q <= 0) return;
-            Navigator.pop(ctx, {'nome': n, 'prezzo': pr, 'quantita': q});
-          }, child: const Text('SALVA')),
-        ],
-      ),
-    );
-    nome.dispose(); prezzo.dispose(); quantita.dispose();
-    if (result != null && mounted) setState(() => articoli[index] = result);
-  }
 
   Future<void> _aggiungiProdotto() async {
     final nome = TextEditingController();
@@ -1555,30 +1494,19 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
         );
       }
-      // Il salvataggio nel database è indipendente dalla generazione del PDF:
-      // un eventuale errore del PDF non deve annullare o nascondere la modifica.
-      String? errorePdf;
-      try {
-        await PdfGenerator.generaECondividiFattura(
-          numero: numero,
-          cliente: cliente!,
-          articoli: articoli,
-          ivaPercent: ivaPercent,
-          pagamento: pagamento,
-          iban: pagamento == 'Bonifico'
-              ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
-              : null,
-        );
-      } catch (e) {
-        errorePdf = e.toString();
-      }
+      await PdfGenerator.generaECondividiFattura(
+        numero: numero,
+        cliente: cliente!,
+        articoli: articoli,
+        ivaPercent: ivaPercent,
+        pagamento: pagamento,
+        iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
+      );
       if (!mounted) return;
-      Navigator.pop(context, true);
-      if (errorePdf != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fattura salvata/modificata, ma PDF non generato: $errorePdf')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.fattura != null ? 'Fattura modificata e PDF pronto per la condivisione.' : 'Fattura salvata e PDF pronto per la condivisione.')),
+      );
+      Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1693,20 +1621,9 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                       contentPadding: EdgeInsets.zero,
                       title: Text(a['nome'].toString()),
                       subtitle: Text('${q.toStringAsFixed(q == q.roundToDouble() ? 0 : 2)} × ${prezzo.toStringAsFixed(2)} €'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'Modifica',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => _modificaProdotto(i),
-                          ),
-                          IconButton(
-                            tooltip: 'Elimina',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => setState(() => articoli.removeAt(i)),
-                          ),
-                        ],
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => setState(() => articoli.removeAt(i)),
                       ),
                     );
                   }),
@@ -1747,8 +1664,10 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                     ],
                     onChanged: (v) => setState(() {
                       pagamento = v ?? 'Contanti';
-                      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
-                        _iban.text = 'IT28F0538715206000003630167';
+                      if (pagamento == 'Bonifico') {
+                        _iban.text = 'IT72R0357601601010002078806';
+                      } else {
+                        _iban.clear();
                       }
                     }),
                   ),
