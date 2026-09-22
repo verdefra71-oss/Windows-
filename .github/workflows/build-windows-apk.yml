@@ -165,10 +165,19 @@ jobs:
           flutter create --platforms=windows --project-name preventivi_app .
 
           $icon = Join-Path $env:APP_DIR 'assets\app_icon.ico'
-          $target = Join-Path $env:APP_DIR 'windows\runner\resources\app_icon.ico'
+          $targetDir = Join-Path $env:APP_DIR 'windows\runner\resources'
+          $target = Join-Path $targetDir 'app_icon.ico'
           if (-not (Test-Path $icon)) { throw "Icona non trovata: $icon" }
+          if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Force $targetDir | Out-Null }
           Copy-Item $icon $target -Force
-          Write-Host "Icona applicata: $target"
+
+          # Assicura che l'eseguibile Windows usi proprio l'icona presente in assets.
+          $rc = Join-Path $env:APP_DIR 'windows\runner\Runner.rc'
+          if (-not (Test-Path $rc)) { throw "Runner.rc non trovato: $rc" }
+          $rcText = Get-Content $rc -Raw
+          $rcText = [regex]::Replace($rcText, '(?m)^IDI_ICON1\s+[^\r\n]+$', 'IDI_ICON1 ICON "resources\\app_icon.ico"')
+          Set-Content -Path $rc -Value $rcText -Encoding ASCII
+          Write-Host "Icona Windows configurata da: $icon"
 
       - name: Get dependencies
         working-directory: ${{ env.APP_DIR }}
@@ -218,14 +227,16 @@ jobs:
           Compression=lzma2
           SolidCompression=yes
           ArchitecturesInstallIn64BitMode=x64compatible
+          SetupIconFile=${{ env.APP_DIR }}\assets\app_icon.ico
           UninstallDisplayIcon={app}\preventivi_app.exe
 
           [Files]
           Source: "$release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+          Source: "${{ env.APP_DIR }}\assets\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
           [Icons]
-          Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
-          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
+          Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"; IconFilename: "{app}\app_icon.ico"
+          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"; IconFilename: "{app}\app_icon.ico"
 
           [Run]
           Filename: "{app}\preventivi_app.exe"; Description: "Avvia Gestione Preventivi"; Flags: nowait postinstall skipifsilent
