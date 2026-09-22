@@ -118,15 +118,22 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: flutter pub get
 
-      - name: Install launcher icon generator
+      - name: Configure launcher icons
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
           set -e
           test -f assets/app_icon.png
-          # Il progetto viene ricreato da flutter create: installiamo il generatore
-          # globalmente per non dipendere dalla presenza della dipendenza nel pubspec.
-          dart pub global activate flutter_launcher_icons 0.14.4
+          cat > flutter_launcher_icons.yaml <<'YAML'
+          android: true
+          ios: false
+          image_path: assets/app_icon.png
+          min_sdk_android: 21
+          adaptive_icon_background: "#FFFFFF"
+          adaptive_icon_foreground: assets/app_icon.png
+          YAML
+          echo "Configurazione launcher creata in flutter_launcher_icons.yaml"
+          cat flutter_launcher_icons.yaml
 
       - name: Generate Android launcher icons
         working-directory: ${{ env.APP_DIR }}
@@ -134,7 +141,9 @@ jobs:
         run: |
           set -e
           test -f assets/app_icon.png
-          dart pub global run flutter_launcher_icons
+          # Usiamo esplicitamente il file di configurazione: così il comando
+          # non dipende da come flutter create ha riscritto il pubspec.yaml.
+          dart run flutter_launcher_icons --file flutter_launcher_icons.yaml
           test -f android/app/src/main/res/mipmap-hdpi/ic_launcher.png
           test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           echo "Android launcher icon generated from assets/app_icon.png"
