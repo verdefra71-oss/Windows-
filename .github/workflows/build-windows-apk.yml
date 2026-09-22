@@ -10,19 +10,11 @@ permissions:
 
 jobs:
   build-apk:
-    name: Android APK
+    name: APK Android
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Find Flutter project
-        shell: bash
-        run: |
-          set -e
-          APP_DIR="$(find . -name pubspec.yaml -not -path '*/.dart_tool/*' -print -quit | xargs -r dirname)"
-          [ -n "$APP_DIR" ] && [ -f "$APP_DIR/pubspec.yaml" ] || { echo "pubspec.yaml non trovato"; exit 1; }
-          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -37,25 +29,90 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Recreate Android platform
+      - name: Locate Flutter project
+        shell: bash
+        run: |
+          set -e
+          if [ -f pubspec.yaml ]; then
+            APP_DIR="."
+          else
+            APP_DIR="$(find . -name pubspec.yaml -not -path '*/.dart_tool/*' -print -quit | xargs dirname)"
+          fi
+          test -f "$APP_DIR/pubspec.yaml"
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          echo "Flutter project: $APP_DIR"
+
+      - name: Generate Android platform files
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
           set -e
           flutter create --platforms=android --project-name preventivi_app .
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i '/<application/i\    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' "$MANIFEST"
 
-          GRADLE="android/app/build.gradle.kts"
-          if [ ! -f "$GRADLE" ]; then echo "$GRADLE non trovato"; exit 1; fi
-          sed -i '/compileOptions {/a\        isCoreLibraryDesugaringEnabled = true' "$GRADLE"
-          cat >> "$GRADLE" <<'KTS'
+      - name: Configure Android manifest
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text(encoding='utf-8')
+          permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+          if 'android.permission.POST_NOTIFICATIONS' not in s:
+              marker = '>'
+              end = s.find(marker)
+              if end < 0:
+                  raise SystemExit('Manifest Android non valido')
+              s = s[:end + 1] + '\n' + permission + s[end + 1:]
+              p.write_text(s, encoding='utf-8')
+          print('Manifest configurato:', p)
+          PY
 
-
-dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
-}
-KTS
+      - name: Configure Android desugaring
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          groovy = Path('android/app/build.gradle')
+          kotlin = Path('android/app/build.gradle.kts')
+          p = groovy if groovy.exists() else kotlin if kotlin.exists() else None
+          if p is None:
+              raise SystemExit('File Gradle Android non trovato')
+          s = p.read_text(encoding='utf-8')
+          if p.suffix == '.gradle':
+              if 'coreLibraryDesugaringEnabled true' not in s:
+                  if 'compileOptions {' in s:
+                      s = s.replace('compileOptions {', 'compileOptions {\n        coreLibraryDesugaringEnabled true', 1)
+                  else:
+                      s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }', 1)
+              if 'sourceCompatibility JavaVersion.VERSION_17' not in s:
+                  s = s.replace('compileOptions {', 'compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17', 1)
+              dep = "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'"
+              if dep not in s:
+                  if 'dependencies {' in s:
+                      s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1)
+                  else:
+                      s += '\n\ndependencies {\n    ' + dep + '\n}\n'
+          else:
+              if 'isCoreLibraryDesugaringEnabled = true' not in s:
+                  if 'compileOptions {' in s:
+                      s = s.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
+                  else:
+                      s = s.replace('android {', 'android {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n        isCoreLibraryDesugaringEnabled = true\n    }', 1)
+              if 'sourceCompatibility = JavaVersion.VERSION_17' not in s:
+                  s = s.replace('compileOptions {', 'compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17', 1)
+              dep = 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")'
+              if dep not in s:
+                  if 'dependencies {' in s:
+                      s = s.replace('dependencies {', 'dependencies {\n    ' + dep, 1)
+                  else:
+                      s += '\n\ndependencies {\n    ' + dep + '\n}\n'
+          p.write_text(s, encoding='utf-8')
+          print('Gradle configurato:', p)
+          PY
 
       - name: Get dependencies
         working-directory: ${{ env.APP_DIR }}
@@ -65,7 +122,7 @@ KTS
         working-directory: ${{ env.APP_DIR }}
         run: flutter analyze --no-fatal-infos
 
-      - name: Build APK
+      - name: Build APK release
         working-directory: ${{ env.APP_DIR }}
         run: flutter build apk --release
 
@@ -77,20 +134,11 @@ KTS
           if-no-files-found: error
 
   build-windows:
-    name: Windows EXE + installer
+    name: Windows EXE + Setup
     runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Find Flutter project
-        shell: pwsh
-        run: |
-          $pub = Get-ChildItem -Path . -Filter pubspec.yaml -Recurse |
-            Where-Object { $_.FullName -notmatch '\\.dart_tool\\' } |
-            Select-Object -First 1
-          if (-not $pub) { throw 'pubspec.yaml non trovato' }
-          "APP_DIR=$($pub.Directory.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -99,30 +147,44 @@ KTS
           channel: stable
           cache: true
 
-      - name: Recreate Windows platform
+      - name: Locate Flutter project
+        shell: pwsh
+        run: |
+          $pub = Get-ChildItem -Path . -Filter pubspec.yaml -Recurse |
+            Where-Object { $_.FullName -notmatch '\\.dart_tool\\' } |
+            Select-Object -First 1
+          if (-not $pub) { throw 'pubspec.yaml non trovato' }
+          "APP_DIR=$($pub.Directory.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Flutter project: $($pub.Directory.FullName)"
+
+      - name: Generate Windows platform files
         working-directory: ${{ env.APP_DIR }}
         shell: pwsh
         run: |
           flutter config --enable-windows-desktop
-          if (Test-Path 'windows') { Remove-Item -Recurse -Force 'windows' }
           flutter create --platforms=windows --project-name preventivi_app .
-          flutter pub get
+
           $icon = Join-Path $env:APP_DIR 'assets\app_icon.ico'
           $target = Join-Path $env:APP_DIR 'windows\runner\resources\app_icon.ico'
-          if (-not (Test-Path $icon)) { throw "Icona Windows non trovata: $icon" }
+          if (-not (Test-Path $icon)) { throw "Icona non trovata: $icon" }
           Copy-Item $icon $target -Force
+          Write-Host "Icona applicata: $target"
 
-      - name: Configure MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+      - name: Get dependencies
+        working-directory: ${{ env.APP_DIR }}
+        run: flutter pub get
 
       - name: Analyze
         working-directory: ${{ env.APP_DIR }}
         shell: pwsh
         run: flutter analyze --no-fatal-infos
 
-      - name: Build Windows
+      - name: Configure Visual Studio
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build Windows release
         working-directory: ${{ env.APP_DIR }}
         shell: pwsh
         run: flutter build windows --release
@@ -130,8 +192,8 @@ KTS
       - name: Create portable ZIP
         shell: pwsh
         run: |
-          $app = "${{ env.APP_DIR }}\build\windows\x64\runner\Release"
-          if (-not (Test-Path $app)) { throw 'Build Windows non trovata' }
+          $app = Join-Path '${{ env.APP_DIR }}' 'build\windows\x64\runner\Release'
+          if (-not (Test-Path $app)) { throw "Build Windows non trovata: $app" }
           Compress-Archive -Path "$app\*" -DestinationPath "$env:GITHUB_WORKSPACE\Gestione-Preventivi-Windows-Portable.zip" -Force
 
       - name: Install Inno Setup
@@ -141,41 +203,42 @@ KTS
       - name: Create installer script
         shell: pwsh
         run: |
+          $release = Join-Path '${{ env.APP_DIR }}' 'build\windows\x64\runner\Release'
+          $out = Join-Path $env:GITHUB_WORKSPACE 'installer'
+          New-Item -ItemType Directory -Force $out | Out-Null
           $iss = @"
-[Setup]
-AppName=Gestione Preventivi
-AppVersion=1.1.0
-AppPublisher=Gestione Preventivi
-DefaultDirName={autopf}\Gestione Preventivi
-DefaultGroupName=Gestione Preventivi
-OutputDir=$env:GITHUB_WORKSPACE\installer
-OutputBaseFilename=Gestione-Preventivi-Setup
-Compression=lzma2
-SolidCompression=yes
-ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\preventivi_app.exe
+          [Setup]
+          AppName=Gestione Preventivi
+          AppVersion=1.1.0
+          AppPublisher=Gestione Preventivi
+          DefaultDirName={autopf}\Gestione Preventivi
+          DefaultGroupName=Gestione Preventivi
+          OutputDir=$out
+          OutputBaseFilename=Gestione-Preventivi-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesInstallIn64BitMode=x64compatible
+          UninstallDisplayIcon={app}\preventivi_app.exe
 
-[Files]
-Source: "${{ env.APP_DIR }}\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+          [Files]
+          Source: "$release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
-[Icons]
-Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
-Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"; Tasks: desktopicon
+          [Icons]
+          Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
+          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
 
-[Tasks]
-Name: "desktopicon"; Description: "Crea un collegamento sul desktop"; GroupDescription: "Collegamenti:"
-
-[Run]
-Filename: "{app}\preventivi_app.exe"; Description: "Avvia Gestione Preventivi"; Flags: nowait postinstall skipifsilent
-"@
-          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\installer" | Out-Null
-          Set-Content "$env:GITHUB_WORKSPACE\preventivi.iss" $iss -Encoding UTF8
+          [Run]
+          Filename: "{app}\preventivi_app.exe"; Description: "Avvia Gestione Preventivi"; Flags: nowait postinstall skipifsilent
+          "@
+          Set-Content -Path (Join-Path $env:GITHUB_WORKSPACE 'preventivi.iss') -Value $iss -Encoding UTF8
 
       - name: Build installer
         shell: pwsh
         run: |
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "$env:GITHUB_WORKSPACE\preventivi.iss"
-          if (-not (Test-Path "$env:GITHUB_WORKSPACE\installer\Gestione-Preventivi-Setup.exe")) { throw 'Installer non creato' }
+          if (-not (Test-Path "$env:GITHUB_WORKSPACE\installer\Gestione-Preventivi-Setup.exe")) {
+            throw 'Installer non creato'
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
