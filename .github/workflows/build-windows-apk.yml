@@ -118,6 +118,16 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: flutter pub get
 
+      - name: Generate Android launcher icons
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          test -f assets/app_icon.png
+          dart run flutter_launcher_icons
+          test -f android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          echo "Android launcher icon generated from assets/app_icon.png"
+
       - name: Analyze
         working-directory: ${{ env.APP_DIR }}
         run: flutter analyze --no-fatal-infos
@@ -197,6 +207,16 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         shell: pwsh
         run: flutter build windows --release
+
+      - name: Verify Windows icon and executable
+        shell: pwsh
+        run: |
+          $release = Join-Path '${{ env.APP_DIR }}' 'build\windows\x64\runner\Release'
+          $exe = Join-Path $release 'preventivi_app.exe'
+          if (-not (Test-Path $exe)) { throw "EXE non trovato: $exe" }
+          $icon = Join-Path '${{ env.APP_DIR }}' 'assets\app_icon.ico'
+          if (-not (Test-Path $icon)) { throw "Icona Windows non trovata: $icon" }
+          Write-Host "Windows EXE creato con configurazione icona da $icon"
 
       - name: Create portable ZIP
         shell: pwsh
