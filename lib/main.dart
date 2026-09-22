@@ -564,33 +564,30 @@ CREATE TABLE fatture (
     required String pagamento,
     String? iban,
   }) async {
-    final db = await database;
-    final values = {
-      'numero': numero,
-      'cliente': cliente,
-      'articoli': jsonEncode(articoli),
-      'iva_percent': ivaPercent,
-      'totale': totale,
-      'pagamento': pagamento,
-      'iban': iban,
-    };
-    var result = await db.update('fatture', values, where: 'id = ?', whereArgs: [id]);
-    // Backup/importazioni precedenti possono aver ricreato la riga con un id diverso.
-    // In quel caso usiamo il numero originale come secondo identificatore.
-    if (result == 0) {
-      throw StateError('La fattura non esiste più nel database. Aggiorna la lista e riprova.');
-    }
+    final result = await (await database).update(
+      'fatture',
+      {
+        'numero': numero,
+        'cliente': cliente,
+        'articoli': jsonEncode(articoli),
+        'iva_percent': ivaPercent,
+        'totale': totale,
+        'pagamento': pagamento,
+        'iban': iban,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     await autoBackup();
     return result;
   }
 
   Future<int> deleteFattura(int id) async {
-    final db = await database;
-    final result = await db.delete('fatture', where: 'id = ?', whereArgs: [id]);
-    if (result == 0) {
-      throw StateError('La fattura non esiste più nel database. Aggiorna la lista e riprova.');
-    }
-    // Il backup non deve mai impedire la cancellazione già eseguita.
+    final result = await (await database).delete(
+      'fatture',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     await autoBackup();
     return result;
   }
@@ -1424,38 +1421,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
   double get ivaPercent => double.tryParse(_iva.text.replaceAll(',', '.')) ?? 0;
   double get totale => imponibile + imponibile * ivaPercent / 100;
 
-  Future<void> _modificaProdotto(int index) async {
-    final a = articoli[index];
-    final nome = TextEditingController(text: (a['nome'] ?? '').toString());
-    final prezzo = TextEditingController(text: ((a['prezzo'] as num?)?.toDouble() ?? 0).toString());
-    final quantita = TextEditingController(text: ((a['quantita'] as num?)?.toDouble() ?? 1).toString());
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Modifica prodotto / servizio'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nome, decoration: const InputDecoration(labelText: 'Descrizione')),
-          const SizedBox(height: 10),
-          TextField(controller: prezzo, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Prezzo unitario €')),
-          const SizedBox(height: 10),
-          TextField(controller: quantita, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Quantità')),
-        ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ANNULLA')),
-          FilledButton(onPressed: () {
-            final n = nome.text.trim();
-            final pr = double.tryParse(prezzo.text.replaceAll(',', '.')) ?? 0;
-            final q = double.tryParse(quantita.text.replaceAll(',', '.')) ?? 1;
-            if (n.isEmpty || pr < 0 || q <= 0) return;
-            Navigator.pop(ctx, {'nome': n, 'prezzo': pr, 'quantita': q});
-          }, child: const Text('SALVA')),
-        ],
-      ),
-    );
-    nome.dispose(); prezzo.dispose(); quantita.dispose();
-    if (result != null && mounted) setState(() => articoli[index] = result);
-  }
-
   Future<void> _aggiungiProdotto() async {
     final nome = TextEditingController();
     final prezzo = TextEditingController();
@@ -1555,30 +1520,21 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
         );
       }
-      // Il salvataggio nel database è indipendente dalla generazione del PDF:
-      // un eventuale errore del PDF non deve annullare o nascondere la modifica.
-      String? errorePdf;
-      try {
-        await PdfGenerator.generaECondividiFattura(
-          numero: numero,
-          cliente: cliente!,
-          articoli: articoli,
-          ivaPercent: ivaPercent,
-          pagamento: pagamento,
-          iban: pagamento == 'Bonifico'
-              ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
-              : null,
-        );
-      } catch (e) {
-        errorePdf = e.toString();
-      }
+      await PdfGenerator.generaECondividiFattura(
+        numero: numero,
+        cliente: cliente!,
+        articoli: articoli,
+        ivaPercent: ivaPercent,
+        pagamento: pagamento,
+        iban: pagamento == 'Bonifico'
+            ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
+            : null,
+      );
       if (!mounted) return;
-      Navigator.pop(context, true);
-      if (errorePdf != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fattura salvata/modificata, ma PDF non generato: $errorePdf')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.fattura != null ? 'Fattura modificata e PDF pronto per la condivisione.' : 'Fattura salvata e PDF pronto per la condivisione.')),
+      );
+      Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1693,20 +1649,9 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                       contentPadding: EdgeInsets.zero,
                       title: Text(a['nome'].toString()),
                       subtitle: Text('${q.toStringAsFixed(q == q.roundToDouble() ? 0 : 2)} × ${prezzo.toStringAsFixed(2)} €'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'Modifica',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => _modificaProdotto(i),
-                          ),
-                          IconButton(
-                            tooltip: 'Elimina',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => setState(() => articoli.removeAt(i)),
-                          ),
-                        ],
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => setState(() => articoli.removeAt(i)),
                       ),
                     );
                   }),
