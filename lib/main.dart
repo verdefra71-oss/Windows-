@@ -3770,6 +3770,9 @@ class _ModificaPreventivoScreenState
   final quantitaController = TextEditingController(text: '1');
   late final TextEditingController scontoController;
 
+  // Ultimo prodotto selezionato dalla lista, usato dal pulsante +.
+  Map<String, dynamic>? prodottoSelezionato;
+
   late List<Map<String, dynamic>> articoli;
   late List<Map<String, dynamic>> acconti;
   late double ivaPercent;
@@ -3811,6 +3814,7 @@ class _ModificaPreventivoScreenState
     final prodotto = await selezionaProdotto(context);
     if (prodotto != null && mounted) {
       setState(() {
+        prodottoSelezionato = Map<String, dynamic>.from(prodotto);
         prodottoController.text = prodotto['nome'].toString();
         prezzoController.text =
             (prodotto['prezzo'] as num).toDouble().toStringAsFixed(2);
@@ -4070,12 +4074,23 @@ Future<void> aggiungiAcconto() async {
       return;
     }
 
+    final voce = <String, dynamic>{
+      'nome': prodottoSelezionato?['nome']?.toString() ?? nome,
+      'prezzo': (prodottoSelezionato?['prezzo'] as num?)?.toDouble() ?? prezzo,
+      'quantita': quantita,
+    };
+
     setState(() {
-      articoli.add({'nome': nome, 'prezzo': prezzo, 'quantita': quantita});
+      articoli.add(voce);
+      prodottoSelezionato = null;
       prodottoController.clear();
       prezzoController.clear();
       quantitaController.text = '1';
     });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Aggiunto al preventivo: ${voce['nome']}')),
+    );
   }
 
   Future<void> salva() async {
