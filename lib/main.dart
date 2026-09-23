@@ -4654,23 +4654,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
     if (appuntamento.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
 
-    Future<void> scegliAppuntamento(StateSetter setModalState) async {
-      final iniziale = appuntamento == null
-          ? DateTime.now().add(const Duration(days: 1))
-          : (DateTime.tryParse(appuntamento!) ?? DateTime.now());
-      final scelto = await showDatePicker(
-        context: context,
-        initialDate: iniziale,
-        firstDate: DateTime.now(),
-        lastDate: DateTime.now().add(const Duration(days: 3650)),
-        helpText: 'Seleziona data appuntamento',
-        cancelText: 'ANNULLA',
-        confirmText: 'CONFERMA',
-      );
-      if (scelto == null) return;
-      appuntamento = DateFormat('yyyy-MM-dd').format(scelto);
-      setModalState(() {});
-    }
 
     await showModalBottomSheet(
       context: context,
@@ -4719,39 +4702,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const SizedBox(height: 6),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.event_outlined),
-                    title: const Text(
-                      'Appuntamento',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      appuntamento == null
-                          ? 'Nessuna data impostata'
-                          : 'Data: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(appuntamento!))}\nNotifica automatica 2 giorni prima',
-                    ),
-                    isThreeLine: true,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: 'Scegli data',
-                          onPressed: () => scegliAppuntamento(setModalState),
-                          icon: const Icon(Icons.calendar_month),
-                        ),
-                        if (appuntamento != null)
-                          IconButton(
-                            tooltip: 'Rimuovi appuntamento',
-                            onPressed: () => setModalState(() => appuntamento = null),
-                            icon: const Icon(Icons.clear),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
                 TextFormField(
                   controller: telefono,
                   keyboardType: TextInputType.phone,
@@ -4892,6 +4842,62 @@ class _ClientiScreenState extends State<ClientiScreen> {
     }
   }
 
+  Future<void> _gestisciAppuntamento(Map<String, dynamic> c) async {
+    final esistente = (c['appuntamento'] ?? '').toString().trim();
+    final iniziale = esistente.isEmpty
+        ? DateTime.now().add(const Duration(days: 1))
+        : (DateTime.tryParse(esistente) ?? DateTime.now());
+
+    final scelto = await showDatePicker(
+      context: context,
+      initialDate: iniziale.isBefore(DateTime.now()) ? DateTime.now() : iniziale,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      helpText: 'Seleziona data appuntamento',
+      cancelText: 'ANNULLA',
+      confirmText: 'CONFERMA',
+    );
+
+    if (scelto == null) return;
+
+    final data = DateFormat('yyyy-MM-dd').format(scelto);
+    await DatabaseHelper.instance.updateCliente(
+      id: c['id'] as int,
+      nome: (c['nome'] ?? '').toString(),
+      telefono: (c['telefono'] ?? '').toString(),
+      email: (c['email'] ?? '').toString(),
+      indirizzo: (c['indirizzo'] ?? '').toString(),
+      partitaIva: (c['partita_iva'] ?? '').toString(),
+      codiceFiscale: (c['codice_fiscale'] ?? '').toString(),
+      parrocchia: (c['parrocchia'] ?? '').toString(),
+      appuntamento: data,
+    );
+
+    await NotificationService.instance.scheduleAppointmentReminder(
+      clientId: c['id'] as int,
+      clientName: (c['nome'] ?? '').toString(),
+      appointmentDate: data,
+    );
+
+    await _carica();
+  }
+
+  Future<void> _rimuoviAppuntamento(Map<String, dynamic> c) async {
+    await DatabaseHelper.instance.updateCliente(
+      id: c['id'] as int,
+      nome: (c['nome'] ?? '').toString(),
+      telefono: (c['telefono'] ?? '').toString(),
+      email: (c['email'] ?? '').toString(),
+      indirizzo: (c['indirizzo'] ?? '').toString(),
+      partitaIva: (c['partita_iva'] ?? '').toString(),
+      codiceFiscale: (c['codice_fiscale'] ?? '').toString(),
+      parrocchia: (c['parrocchia'] ?? '').toString(),
+      appuntamento: null,
+    );
+    await NotificationService.instance.cancelAppointmentReminder(c['id'] as int);
+    await _carica();
+  }
+
   Future<void> _elimina(Map<String, dynamic> c) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -4998,60 +5004,111 @@ class _ClientiScreenState extends State<ClientiScreen> {
                         'Appuntamento: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(c['appuntamento'].toString()))}',
                     ].join('\n');
 
+                    final dataAppuntamento = (c['appuntamento'] ?? '').toString().trim();
+                    final haAppuntamento = dataAppuntamento.isNotEmpty;
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 4,
-                        ),
-                        leading: const CircleAvatar(
-                          child: Icon(Icons.person),
-                        ),
-                        title: Text(
-                          c['nome'],
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        subtitle: Text(dettagli),
-                        isThreeLine: true,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if ((c['indirizzo'] ?? '').toString().trim().isNotEmpty)
-                              IconButton(
-                                tooltip: 'Apri in Google Maps',
-                                icon: const Icon(Icons.map_outlined),
-                                onPressed: () => _apriMaps(c['indirizzo'].toString()),
+                      child: Column(
+                        children: [
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 4,
+                            ),
+                            leading: const CircleAvatar(
+                              child: Icon(Icons.person),
+                            ),
+                            title: Text(
+                              c['nome'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
                               ),
-                            PopupMenuButton<String>(
-                              onSelected: (v) {
-                                if (v == 'edit') {
-                                  _formCliente(c);
-                                } else {
-                                  _elimina(c);
-                                }
-                              },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: ListTile(
-                                    leading: Icon(Icons.edit),
-                                    title: Text('Modifica'),
+                            ),
+                            subtitle: Text(dettagli),
+                            isThreeLine: true,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if ((c['indirizzo'] ?? '').toString().trim().isNotEmpty)
+                                  IconButton(
+                                    tooltip: 'Apri in Google Maps',
+                                    icon: const Icon(Icons.map_outlined),
+                                    onPressed: () => _apriMaps(c['indirizzo'].toString()),
                                   ),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: ListTile(
-                                    leading: Icon(Icons.delete_outline),
-                                    title: Text('Elimina'),
-                                  ),
+                                PopupMenuButton<String>(
+                                  onSelected: (v) {
+                                    if (v == 'edit') {
+                                      _formCliente(c);
+                                    } else {
+                                      _elimina(c);
+                                    }
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: ListTile(
+                                        leading: Icon(Icons.edit),
+                                        title: Text('Modifica'),
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: ListTile(
+                                        leading: Icon(Icons.delete_outline),
+                                        title: Text('Elimina'),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outlineVariant,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.event_outlined,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                title: const Text(
+                                  'Appuntamento',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: Text(
+                                  haAppuntamento
+                                      ? 'Data: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(dataAppuntamento))}\nNotifica automatica 2 giorni prima'
+                                      : 'Nessun appuntamento impostato',
+                                ),
+                                isThreeLine: haAppuntamento,
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: haAppuntamento ? 'Modifica appuntamento' : 'Aggiungi appuntamento',
+                                      onPressed: () => _gestisciAppuntamento(c),
+                                      icon: const Icon(Icons.calendar_month),
+                                    ),
+                                    if (haAppuntamento)
+                                      IconButton(
+                                        tooltip: 'Rimuovi appuntamento',
+                                        onPressed: () => _rimuoviAppuntamento(c),
+                                        icon: const Icon(Icons.clear),
+                                      ),
+                                  ],
+                                ),
+                                onTap: () => _gestisciAppuntamento(c),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }),
