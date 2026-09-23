@@ -4853,7 +4853,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
 
     nome.dispose();
     telefono.dispose();
