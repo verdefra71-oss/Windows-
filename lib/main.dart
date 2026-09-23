@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -109,6 +110,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   static const _enabledKey = 'monthly_acconti_notifications_enabled';
   static const _notificationId = 7001;
+  static const _appointmentNotificationBaseId = 800000;
 
   Future<void> initialize() async {
     if (Platform.isWindows || Platform.isLinux) return;
@@ -152,6 +154,69 @@ class NotificationService {
 
     await requestPermission();
     await refreshMonthlyReminder();
+  }
+
+  int _appointmentNotificationId(int clientId) =>
+      _appointmentNotificationBaseId + clientId;
+
+  Future<void> cancelAppointmentReminder(int clientId) async {
+    if (Platform.isWindows || Platform.isLinux) return;
+    await _plugin.cancel(_appointmentNotificationId(clientId));
+  }
+
+  Future<void> scheduleAppointmentReminder({
+    required int clientId,
+    required String clientName,
+    required String? appointmentDate,
+  }) async {
+    if (Platform.isWindows || Platform.isLinux) return;
+    await cancelAppointmentReminder(clientId);
+    if (appointmentDate == null || appointmentDate.trim().isEmpty) return;
+
+    final date = DateTime.tryParse(appointmentDate);
+    if (date == null) return;
+
+    await requestPermission();
+    final appointment = tz.TZDateTime(
+      tz.local,
+      date.year,
+      date.month,
+      date.day,
+    );
+    final reminder = appointment.subtract(const Duration(days: 2));
+    final now = tz.TZDateTime.now(tz.local);
+    final scheduled = tz.TZDateTime(
+      tz.local,
+      reminder.year,
+      reminder.month,
+      reminder.day,
+      9,
+    );
+
+    // Se l'appuntamento è già troppo vicino o passato, non creiamo
+    // una notifica immediata: l'utente può comunque vedere la data nel cliente.
+    if (!scheduled.isAfter(now)) return;
+
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'appuntamenti_clienti',
+        'Appuntamenti clienti',
+        channelDescription: 'Promemoria degli appuntamenti con i clienti.',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+      iOS: DarwinNotificationDetails(),
+      macOS: DarwinNotificationDetails(),
+    );
+
+    await _plugin.zonedSchedule(
+      _appointmentNotificationId(clientId),
+      'Appuntamento tra 2 giorni',
+      'Hai un appuntamento con $clientName il ${DateFormat('dd/MM/yyyy').format(date)}.',
+      scheduled,
+      details,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+    );
   }
 
   Future<void> refreshMonthlyReminder() async {
@@ -220,7 +285,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 12,
+      version: 13,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -231,7 +296,8 @@ CREATE TABLE clienti (
   indirizzo TEXT,
   partita_iva TEXT,
   codice_fiscale TEXT,
-  parrocchia TEXT
+  parrocchia TEXT,
+  appuntamento TEXT
 )
 ''');
 
@@ -348,6 +414,9 @@ CREATE TABLE fatture (
           // Normalizza i vecchi preventivi: garantisce che i campi usati
           // dalla schermata Modifica siano sempre valorizzati.
           await db.execute("UPDATE preventivi SET accettato = COALESCE(accettato, 0), pagato = COALESCE(pagato, 0), acconti = COALESCE(acconti, '[]')");
+        }
+        if (oldVersion < 13) {
+          await db.execute("ALTER TABLE clienti ADD COLUMN appuntamento TEXT");
         }
       },
     );
@@ -474,6 +543,7 @@ CREATE TABLE fatture (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
+    String? appuntamento,
   }) async {
     final id = await (await database).insert('clienti', {
       'nome': nome,
@@ -483,6 +553,7 @@ CREATE TABLE fatture (
       'partita_iva': partitaIva,
       'codice_fiscale': codiceFiscale,
       'parrocchia': parrocchia,
+      'appuntamento': appuntamento,
     });
     await autoBackup();
     return id;
@@ -497,6 +568,7 @@ CREATE TABLE fatture (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
+    String? appuntamento,
   }) async {
     final result = await (await database).update(
       'clienti',
@@ -508,6 +580,7 @@ CREATE TABLE fatture (
         'partita_iva': partitaIva,
         'codice_fiscale': codiceFiscale,
         'parrocchia': parrocchia,
+        'appuntamento': appuntamento,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -563,30 +636,33 @@ CREATE TABLE fatture (
     required String pagamento,
     String? iban,
   }) async {
-    final result = await (await database).update(
-      'fatture',
-      {
-        'numero': numero,
-        'cliente': cliente,
-        'articoli': jsonEncode(articoli),
-        'iva_percent': ivaPercent,
-        'totale': totale,
-        'pagamento': pagamento,
-        'iban': iban,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final db = await database;
+    final values = {
+      'numero': numero,
+      'cliente': cliente,
+      'articoli': jsonEncode(articoli),
+      'iva_percent': ivaPercent,
+      'totale': totale,
+      'pagamento': pagamento,
+      'iban': iban,
+    };
+    var result = await db.update('fatture', values, where: 'id = ?', whereArgs: [id]);
+    // Backup/importazioni precedenti possono aver ricreato la riga con un id diverso.
+    // In quel caso usiamo il numero originale come secondo identificatore.
+    if (result == 0) {
+      throw StateError('La fattura non esiste più nel database. Aggiorna la lista e riprova.');
+    }
     await autoBackup();
     return result;
   }
 
   Future<int> deleteFattura(int id) async {
-    final result = await (await database).delete(
-      'fatture',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final db = await database;
+    final result = await db.delete('fatture', where: 'id = ?', whereArgs: [id]);
+    if (result == 0) {
+      throw StateError('La fattura non esiste più nel database. Aggiorna la lista e riprova.');
+    }
+    // Il backup non deve mai impedire la cancellazione già eseguita.
     await autoBackup();
     return result;
   }
@@ -1278,13 +1354,10 @@ class PdfGenerator {
               children: [
                 pw.Text('DATI AZIENDA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: gold)),
                 pw.SizedBox(height: 4),
-                pw.Text('Verde Emanuele', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('Via Mario Francesco Pagano, 8 - 80022 Arzano (NA)'),
-                pw.Text('C.F. VRDMNL76H22F839Q'),
-                pw.Text('P. IVA 06089401217'),
-                pw.Text('Cell. 333 179 8874'),
-                pw.Text('Email: verdeemanuele@gmail.com'),
-                pw.Text('PEC: verdeemanuele@pec.it'),
+                pw.Text('di CARPENTIERI ALFONSO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('Sede legale: via Ugo Pirro, 9 - 84100 Salerno'),
+                pw.Text('Cell. 328 697 2865'),
+                pw.Text('P. IVA 06051430657'),
               ],
             ),
           ),
@@ -1296,10 +1369,10 @@ class PdfGenerator {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text('Metodo di pagamento: $pagamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                if (pagamento == 'Bonifico' && (iban ?? '').trim().isNotEmpty)
+                if (pagamento == 'Bonifico')
                   pw.Padding(
                     padding: const pw.EdgeInsets.only(top: 4),
-                    child: pw.Text('IBAN: ${iban!.trim()}'),
+                    child: pw.Text('IBAN: ${((iban ?? '').trim().isEmpty ? 'IT28F0538715206000003630167' : iban!.trim())}'),
                   ),
               ],
             ),
@@ -1308,10 +1381,41 @@ class PdfGenerator {
       ),
     );
 
-    await Printing.sharePdf(
-      bytes: await pdf.save(),
-      filename: 'Fattura_Pro-Forma_$numero.pdf',
+    final pdfBytes = await pdf.save();
+    final safeNumero = numero.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final filename = 'Fattura_Pro-Forma_$safeNumero.pdf';
+
+    // Su Windows la condivisione nativa di Printing può fallire in alcune
+    // configurazioni desktop. Salviamo quindi direttamente il PDF e lo
+    // apriamo con il programma PDF predefinito di Windows.
+    if (Platform.isWindows) {
+      Directory? downloads;
+      try {
+        downloads = await getDownloadsDirectory();
+      } catch (_) {}
+      final directory = downloads ?? await getApplicationDocumentsDirectory();
+      final file = File(p.join(directory.path, filename));
+      await file.writeAsBytes(pdfBytes, flush: true);
+
+      final result = await Process.run(
+        'explorer.exe',
+        [file.path],
+        runInShell: false,
+      );
+      if (result.exitCode != 0) {
+        throw Exception('PDF creato in: ${file.path}');
+      }
+      return;
+    }
+
+    // Su Android/iOS mantiene la condivisione del PDF.
+    final condiviso = await Printing.sharePdf(
+      bytes: pdfBytes,
+      filename: filename,
     );
+    if (!condiviso) {
+      throw Exception('PDF creato, ma la condivisione non è stata aperta.');
+    }
   }
 
 }
@@ -1351,9 +1455,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       _iva.text = ((f['iva_percent'] as num?)?.toDouble() ?? 0).toString();
       pagamento = (f['pagamento'] ?? 'Contanti').toString();
       _iban.text = (f['iban'] ?? '').toString();
-      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
-        _iban.text = 'IT72R0357601601010002078806';
-      }
       try {
         final raw = jsonDecode((f['articoli'] ?? '[]').toString());
         if (raw is List) {
@@ -1394,6 +1495,38 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
 
   double get ivaPercent => double.tryParse(_iva.text.replaceAll(',', '.')) ?? 0;
   double get totale => imponibile + imponibile * ivaPercent / 100;
+
+  Future<void> _modificaProdotto(int index) async {
+    final a = articoli[index];
+    final nome = TextEditingController(text: (a['nome'] ?? '').toString());
+    final prezzo = TextEditingController(text: ((a['prezzo'] as num?)?.toDouble() ?? 0).toString());
+    final quantita = TextEditingController(text: ((a['quantita'] as num?)?.toDouble() ?? 1).toString());
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Modifica prodotto / servizio'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: nome, decoration: const InputDecoration(labelText: 'Descrizione')),
+          const SizedBox(height: 10),
+          TextField(controller: prezzo, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Prezzo unitario €')),
+          const SizedBox(height: 10),
+          TextField(controller: quantita, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Quantità')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ANNULLA')),
+          FilledButton(onPressed: () {
+            final n = nome.text.trim();
+            final pr = double.tryParse(prezzo.text.replaceAll(',', '.')) ?? 0;
+            final q = double.tryParse(quantita.text.replaceAll(',', '.')) ?? 1;
+            if (n.isEmpty || pr < 0 || q <= 0) return;
+            Navigator.pop(ctx, {'nome': n, 'prezzo': pr, 'quantita': q});
+          }, child: const Text('SALVA')),
+        ],
+      ),
+    );
+    nome.dispose(); prezzo.dispose(); quantita.dispose();
+    if (result != null && mounted) setState(() => articoli[index] = result);
+  }
 
   Future<void> _aggiungiProdotto() async {
     final nome = TextEditingController();
@@ -1494,19 +1627,30 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
         );
       }
-      await PdfGenerator.generaECondividiFattura(
-        numero: numero,
-        cliente: cliente!,
-        articoli: articoli,
-        ivaPercent: ivaPercent,
-        pagamento: pagamento,
-        iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
-      );
+      // Il salvataggio nel database è indipendente dalla generazione del PDF:
+      // un eventuale errore del PDF non deve annullare o nascondere la modifica.
+      String? errorePdf;
+      try {
+        await PdfGenerator.generaECondividiFattura(
+          numero: numero,
+          cliente: cliente!,
+          articoli: articoli,
+          ivaPercent: ivaPercent,
+          pagamento: pagamento,
+          iban: pagamento == 'Bonifico'
+              ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
+              : null,
+        );
+      } catch (e) {
+        errorePdf = e.toString();
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.fattura != null ? 'Fattura modificata e PDF pronto per la condivisione.' : 'Fattura salvata e PDF pronto per la condivisione.')),
-      );
-      Navigator.pop(context);
+      Navigator.pop(context, true);
+      if (errorePdf != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fattura salvata/modificata, ma PDF non generato: $errorePdf')),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1621,9 +1765,20 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                       contentPadding: EdgeInsets.zero,
                       title: Text(a['nome'].toString()),
                       subtitle: Text('${q.toStringAsFixed(q == q.roundToDouble() ? 0 : 2)} × ${prezzo.toStringAsFixed(2)} €'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => setState(() => articoli.removeAt(i)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Modifica',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => _modificaProdotto(i),
+                          ),
+                          IconButton(
+                            tooltip: 'Elimina',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => setState(() => articoli.removeAt(i)),
+                          ),
+                        ],
                       ),
                     );
                   }),
@@ -1664,10 +1819,8 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                     ],
                     onChanged: (v) => setState(() {
                       pagamento = v ?? 'Contanti';
-                      if (pagamento == 'Bonifico') {
-                        _iban.text = 'IT72R0357601601010002078806';
-                      } else {
-                        _iban.clear();
+                      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
+                        _iban.text = 'IT28F0538715206000003630167';
                       }
                     }),
                   ),
@@ -4498,13 +4651,34 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['codice_fiscale'] ?? '');
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
+    String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
+    if (appuntamento != null && appuntamento!.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
+
+    Future<void> scegliAppuntamento(StateSetter setModalState) async {
+      final iniziale = appuntamento == null
+          ? DateTime.now().add(const Duration(days: 1))
+          : (DateTime.tryParse(appuntamento!) ?? DateTime.now());
+      final scelto = await showDatePicker(
+        context: context,
+        initialDate: iniziale,
+        firstDate: DateTime.now(),
+        lastDate: DateTime.now().add(const Duration(days: 3650)),
+        helpText: 'Seleziona data appuntamento',
+        cancelText: 'ANNULLA',
+        confirmText: 'CONFERMA',
+      );
+      if (scelto == null) return;
+      appuntamento = DateFormat('yyyy-MM-dd').format(scelto);
+      setModalState(() {});
+    }
 
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
           left: 20,
           right: 20,
           top: 20,
@@ -4546,6 +4720,39 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                const SizedBox(height: 6),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.event_outlined),
+                    title: const Text(
+                      'Appuntamento',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      appuntamento == null
+                          ? 'Nessuna data impostata'
+                          : 'Data: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(appuntamento!))}\nNotifica automatica 2 giorni prima',
+                    ),
+                    isThreeLine: true,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Scegli data',
+                          onPressed: () => scegliAppuntamento(setModalState),
+                          icon: const Icon(Icons.calendar_month),
+                        ),
+                        if (appuntamento != null)
+                          IconButton(
+                            tooltip: 'Rimuovi appuntamento',
+                            onPressed: () => setModalState(() => appuntamento = null),
+                            icon: const Icon(Icons.clear),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
                 TextFormField(
                   controller: telefono,
                   keyboardType: TextInputType.phone,
@@ -4598,8 +4805,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
                     onPressed: () async {
                       if (!key.currentState!.validate()) return;
 
+                      int clienteId;
                       if (cliente == null) {
-                        await DatabaseHelper.instance.insertCliente(
+                        clienteId = await DatabaseHelper.instance.insertCliente(
                           nome: nome.text.trim(),
                           telefono: telefono.text.trim(),
                           email: email.text.trim(),
@@ -4607,8 +4815,10 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
+                          appuntamento: appuntamento,
                         );
                       } else {
+                        clienteId = cliente['id'] as int;
                         await DatabaseHelper.instance.updateCliente(
                           id: cliente['id'],
                           nome: nome.text.trim(),
@@ -4618,8 +4828,15 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
+                          appuntamento: appuntamento,
                         );
                       }
+
+                      await NotificationService.instance.scheduleAppointmentReminder(
+                        clientId: clienteId,
+                        clientName: nome.text.trim(),
+                        appointmentDate: appuntamento,
+                      );
 
                       if (ctx.mounted) Navigator.pop(ctx);
                       await _carica();
@@ -4637,7 +4854,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
           ),
         ),
       ),
-    );
+      );
 
     nome.dispose();
     telefono.dispose();
@@ -4695,6 +4912,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
     );
 
     if (ok == true) {
+      await NotificationService.instance.cancelAppointmentReminder(c['id'] as int);
       await DatabaseHelper.instance.deleteCliente(c['id']);
       await _carica();
     }
@@ -4776,6 +4994,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
                         c['indirizzo'],
                       if ((c['parrocchia'] ?? '').toString().isNotEmpty)
                         'Parrocchia: ${c['parrocchia']}',
+                      if ((c['appuntamento'] ?? '').toString().trim().isNotEmpty)
+                        'Appuntamento: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(c['appuntamento'].toString()))}',
                     ].join('\n');
 
                     return Card(
