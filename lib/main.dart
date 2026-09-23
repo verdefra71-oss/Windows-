@@ -4060,33 +4060,33 @@ Future<void> aggiungiAcconto() async {
     super.dispose();
   }
 
-  void aggiungi([Map<String, dynamic>? prodottoDalCatalogo]) {
-    // Il prodotto selezionato viene passato direttamente al comando di aggiunta.
-    // In questo modo il pulsante non dipende dallo stato ricostruito dei TextField.
-    final selezionato = prodottoDalCatalogo ?? prodottoSelezionato;
-    final nomeCampo = prodottoController.text.trim();
-    final prezzoCampo = double.tryParse(
+  void aggiungi() {
+    // In modifica preventivo la sorgente di verita' sono i campi compilati
+    // dopo la selezione dal catalogo. Il prodotto selezionato serve solo
+    // per precompilare i campi, non per decidere se l'inserimento avviene.
+    final nome = prodottoController.text.trim();
+    final prezzo = double.tryParse(
       prezzoController.text.trim().replaceAll(',', '.'),
     );
     final quantita = double.tryParse(
       quantitaController.text.trim().replaceAll(',', '.'),
     );
 
-    final nome = (selezionato?['nome'] ?? nomeCampo).toString().trim();
-    final prezzoSelezionato = selezionato?['prezzo'];
-    final prezzo = prezzoSelezionato is num
-        ? prezzoSelezionato.toDouble()
-        : double.tryParse(
-            prezzoSelezionato?.toString().replaceAll(',', '.') ??
-                prezzoCampo?.toString() ??
-                '',
-          );
-
-    if (nome.isEmpty || prezzo == null || prezzo < 0 || quantita == null || quantita <= 0) {
+    if (nome.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Inserisci descrizione, prezzo e quantità validi.'),
-        ),
+        const SnackBar(content: Text('Seleziona o inserisci un prodotto/servizio.')),
+      );
+      return;
+    }
+    if (prezzo == null || prezzo < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inserisci un prezzo valido.')),
+      );
+      return;
+    }
+    if (quantita == null || quantita <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inserisci una quantita valida.')),
       );
       return;
     }
@@ -4098,8 +4098,9 @@ Future<void> aggiungiAcconto() async {
     };
 
     setState(() {
-      // Aggiunge una NUOVA voce senza sostituire quelle già presenti.
-      articoli.add(voce);
+      // Aggiunta in coda: le voci gia' presenti nel vecchio preventivo
+      // rimangono intatte.
+      articoli = <Map<String, dynamic>>[...articoli, voce];
       prodottoSelezionato = null;
       prodottoController.clear();
       prezzoController.clear();
@@ -4391,10 +4392,11 @@ Future<void> aggiungiAcconto() async {
                   ),
                 ),
                 const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: () => aggiungi(prodottoSelezionato),
-                  icon: const Icon(Icons.add),
-                  label: const Text('AGGIUNGI'),
+                IconButton(
+                  tooltip: 'Aggiungi al preventivo',
+                  onPressed: aggiungi,
+                  icon: const Icon(Icons.add_circle),
+                  iconSize: 38,
                 ),
               ],
             ),
