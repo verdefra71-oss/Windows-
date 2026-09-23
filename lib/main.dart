@@ -4651,7 +4651,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
-    if (appuntamento!.isEmpty) appuntamento = null;
+    if (appuntamento.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
 
     Future<void> scegliAppuntamento(StateSetter setModalState) async {
@@ -4852,7 +4852,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
             ),
           ),
         ),
-      ),
       ),
     );
 
