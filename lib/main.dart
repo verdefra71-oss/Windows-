@@ -3816,8 +3816,12 @@ class _ModificaPreventivoScreenState
       setState(() {
         prodottoSelezionato = Map<String, dynamic>.from(prodotto);
         prodottoController.text = prodotto['nome'].toString();
-        prezzoController.text =
-            (prodotto['prezzo'] as num).toDouble().toStringAsFixed(2);
+        final prezzo = prodotto['prezzo'] is num
+            ? (prodotto['prezzo'] as num).toDouble()
+            : double.tryParse(
+                prodotto['prezzo'].toString().replaceAll(',', '.'),
+              ) ?? 0;
+        prezzoController.text = prezzo.toStringAsFixed(2);
         quantitaController.text = '1';
       });
     }
@@ -4057,16 +4061,22 @@ Future<void> aggiungiAcconto() async {
   }
 
   void aggiungi() {
-    // Usa sempre i valori presenti nei campi della schermata. In questo modo
-    // il pulsante + funziona anche dopo aver scelto un prodotto dall'archivio,
-    // senza dipendere dal riferimento alla Map restituita dal dialog.
-    final nome = prodottoController.text.trim();
-    final prezzo = double.tryParse(
+    // Se il prodotto arriva dal catalogo, usa direttamente l'oggetto selezionato.
+    // Questo evita che la conversione/rilettura dei TextField impedisca l'inserimento.
+    final selezionato = prodottoSelezionato;
+    final nomeCampo = prodottoController.text.trim();
+    final prezzoCampo = double.tryParse(
       prezzoController.text.trim().replaceAll(',', '.'),
     );
     final quantita = double.tryParse(
       quantitaController.text.trim().replaceAll(',', '.'),
     );
+
+    final nome = (selezionato?['nome'] ?? nomeCampo).toString().trim();
+    final prezzoSelezionato = selezionato?['prezzo'];
+    final prezzo = prezzoSelezionato is num
+        ? prezzoSelezionato.toDouble()
+        : double.tryParse(prezzoSelezionato?.toString().replaceAll(',', '.') ?? '') ?? prezzoCampo;
 
     if (nome.isEmpty || prezzo == null || prezzo < 0 || quantita == null || quantita <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4084,6 +4094,7 @@ Future<void> aggiungiAcconto() async {
     };
 
     setState(() {
+      // Aggiunge una NUOVA voce senza sostituire quelle già presenti.
       articoli.add(voce);
       prodottoSelezionato = null;
       prodottoController.clear();
@@ -4092,7 +4103,7 @@ Future<void> aggiungiAcconto() async {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Aggiunto al preventivo: ${voce['nome']}')),
+      SnackBar(content: Text('Aggiunto al preventivo: $nome')),
     );
   }
 
