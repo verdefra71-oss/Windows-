@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1523,6 +1522,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           }, child: const Text('SALVA')),
         ],
       ),
+    );
     nome.dispose(); prezzo.dispose(); quantita.dispose();
     if (result != null && mounted) setState(() => articoli[index] = result);
   }
@@ -4651,7 +4651,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
-    if (appuntamento!.isEmpty) appuntamento = null;
+    if (appuntamento?.isEmpty ?? false) appuntamento = null;
     final key = GlobalKey<FormState>();
 
     Future<void> scegliAppuntamento(StateSetter setModalState) async {
@@ -4853,6 +4853,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
           ),
         ),
       ),
+    );
 
     nome.dispose();
     telefono.dispose();
