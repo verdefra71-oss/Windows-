@@ -4060,10 +4060,10 @@ Future<void> aggiungiAcconto() async {
     super.dispose();
   }
 
-  void aggiungi() {
-    // Se il prodotto arriva dal catalogo, usa direttamente l'oggetto selezionato.
-    // Questo evita che la conversione/rilettura dei TextField impedisca l'inserimento.
-    final selezionato = prodottoSelezionato;
+  void aggiungi([Map<String, dynamic>? prodottoDalCatalogo]) {
+    // Il prodotto selezionato viene passato direttamente al comando di aggiunta.
+    // In questo modo il pulsante non dipende dallo stato ricostruito dei TextField.
+    final selezionato = prodottoDalCatalogo ?? prodottoSelezionato;
     final nomeCampo = prodottoController.text.trim();
     final prezzoCampo = double.tryParse(
       prezzoController.text.trim().replaceAll(',', '.'),
@@ -4076,7 +4076,11 @@ Future<void> aggiungiAcconto() async {
     final prezzoSelezionato = selezionato?['prezzo'];
     final prezzo = prezzoSelezionato is num
         ? prezzoSelezionato.toDouble()
-        : double.tryParse(prezzoSelezionato?.toString().replaceAll(',', '.') ?? '') ?? prezzoCampo;
+        : double.tryParse(
+            prezzoSelezionato?.toString().replaceAll(',', '.') ??
+                prezzoCampo?.toString() ??
+                '',
+          );
 
     if (nome.isEmpty || prezzo == null || prezzo < 0 || quantita == null || quantita <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4387,10 +4391,10 @@ Future<void> aggiungiAcconto() async {
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton.filled(
-                  tooltip: 'Aggiungi al preventivo',
-                  onPressed: aggiungi,
+                FilledButton.icon(
+                  onPressed: () => aggiungi(prodottoSelezionato),
                   icon: const Icon(Icons.add),
+                  label: const Text('AGGIUNGI'),
                 ),
               ],
             ),
