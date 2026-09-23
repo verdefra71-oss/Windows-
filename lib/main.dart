@@ -4057,6 +4057,9 @@ Future<void> aggiungiAcconto() async {
   }
 
   void aggiungi() {
+    // Usa sempre i valori presenti nei campi della schermata. In questo modo
+    // il pulsante + funziona anche dopo aver scelto un prodotto dall'archivio,
+    // senza dipendere dal riferimento alla Map restituita dal dialog.
     final nome = prodottoController.text.trim();
     final prezzo = double.tryParse(
       prezzoController.text.trim().replaceAll(',', '.'),
@@ -4075,8 +4078,8 @@ Future<void> aggiungiAcconto() async {
     }
 
     final voce = <String, dynamic>{
-      'nome': prodottoSelezionato?['nome']?.toString() ?? nome,
-      'prezzo': (prodottoSelezionato?['prezzo'] as num?)?.toDouble() ?? prezzo,
+      'nome': nome,
+      'prezzo': prezzo,
       'quantita': quantita,
     };
 
@@ -4374,6 +4377,7 @@ Future<void> aggiungiAcconto() async {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
+                  tooltip: 'Aggiungi al preventivo',
                   onPressed: aggiungi,
                   icon: const Icon(Icons.add),
                 ),
