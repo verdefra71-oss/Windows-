@@ -1238,13 +1238,6 @@ class PdfGenerator {
               ),
             ),
           ],
-          if ((datiAzienda['iban'] ?? '').toString().trim().isNotEmpty)
-            pw.Container(
-              width: double.infinity,
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(border: pw.Border.all(color: gold), borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5))),
-              child: pw.Text('IBAN: ${(datiAzienda['iban'] ?? '').toString()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-            ),
           pw.SizedBox(height: 25),
           pw.Divider(color: gold),
           pw.SizedBox(height: 6),
@@ -2070,6 +2063,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int acconti = 0;
   int fatture = 0;
   bool loading = true;
+  String _logoPath = '';
 
   static const _gold = Color(0xFFD4AF37);
   static const _darkGold = Color(0xFF8A6200);
@@ -2091,6 +2085,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       db.getAcconti(),
       db.getFatture(),
     ]);
+    final impostazioni = await db.getImpostazioni();
     if (!mounted) return;
     setState(() {
       preventivi = results[0].length;
@@ -2098,6 +2093,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       prodotti = results[2].length;
       acconti = results[3].length;
       fatture = results[4].length;
+      _logoPath = (impostazioni['logo_path'] ?? '').toString().trim();
       loading = false;
     });
   }
@@ -2168,15 +2164,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: SizedBox(
                             height: 102,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'GESTIONE\nPREVENTIVI',
-                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                              ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                if (_logoPath.isNotEmpty)
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.file(
+                                      File(_logoPath),
+                                      width: 82,
+                                      height: 82,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                if (_logoPath.isNotEmpty) const SizedBox(width: 14),
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'GESTIONE\nPREVENTIVI',
+                                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -5667,7 +5680,7 @@ class _BackupScreenState extends State<BackupScreen> {
       });
       if (mounted) {
         setState(() => lastMessage =
-            'Dati salvati. Logo, dati azienda e IBAN verranno stampati nei preventivi e nelle fatture.');
+            "Dati salvati. Logo e dati azienda verranno stampati nei preventivi e nelle fatture; l'IBAN soltanto nelle fatture.");
       }
     } catch (e) {
       if (mounted) setState(() => lastMessage = 'Errore salvataggio dati: $e');
@@ -5777,7 +5790,7 @@ class _BackupScreenState extends State<BackupScreen> {
                   const SizedBox(height: 6),
                   const Text(
                     'Questi dati vengono memorizzati nell’app per poterli gestire manualmente. '
-                    'Vengono utilizzati nei preventivi e nelle fatture.',
+                    "Vengono utilizzati nei preventivi e nelle fatture. L'IBAN viene stampato soltanto nelle fatture.",
                     style: TextStyle(fontSize: 13),
                   ),
                   const SizedBox(height: 16),
