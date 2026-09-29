@@ -1689,21 +1689,35 @@ class PdfGenerator {
                 if ((datiAzienda['partita_iva'] ?? '').toString().trim().isNotEmpty) pw.Text('P. IVA: ${(datiAzienda['partita_iva'] ?? '').toString()}'),
                 if ((datiAzienda['codice_fiscale'] ?? '').toString().trim().isNotEmpty) pw.Text('C.F.: ${(datiAzienda['codice_fiscale'] ?? '').toString()}'),
               ])),
+
             ],
           ),
           pw.SizedBox(height: 8),
-          pw.Text('FATTURA PRO-FORMA', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: gold)),
-          pw.SizedBox(height: 3),
           pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-              pw.Text('Data: $data'),
+              pw.Expanded(
+                child: pw.Text(
+                  'FATTURA PRO-FORMA',
+                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: gold),
+                ),
+              ),
+              pw.SizedBox(width: 12),
+              pw.Container(
+                width: 190,
+                alignment: pw.Alignment.topRight,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('marca da bollo assolta in originale'),
+                    pw.Text('Data: $data'),
+                  ],
+                ),
+              ),
             ],
           ),
-          pw.SizedBox(height: 3),
-          pw.Text('marca da bollo assolta in originale'),
-pw.SizedBox(height: 18),
+          pw.SizedBox(height: 14),
           pw.Text('DATI DESTINATARIO', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
           pw.SizedBox(height: 5),
           if (value('parrocchia').isNotEmpty)
