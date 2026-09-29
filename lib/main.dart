@@ -5690,15 +5690,15 @@ class _BackupScreenState extends State<BackupScreen> {
     final desktop = p.join(Platform.environment['USERPROFILE'] ?? '', 'Desktop', 'Gestione Preventivi.lnk');
     final startMenu = p.join(Platform.environment['APPDATA'] ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Gestione Preventivi.lnk');
     final script = '''
-$ws = New-Object -ComObject WScript.Shell
-$ico = '${icoPath.replaceAll("'", "''")}'
-$target = '${exePath.replaceAll("'", "''")}'
-foreach ($lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll("'", "''")}')) {
-  if (Test-Path $lnk) {
-    $sc = $ws.CreateShortcut($lnk)
-    $sc.TargetPath = $target
-    $sc.IconLocation = "$ico,0"
-    $sc.Save()
+\$ws = New-Object -ComObject WScript.Shell
+\$ico = '${icoPath.replaceAll("'", "''")}'
+\$target = '${exePath.replaceAll("'", "''")}'
+foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll("'", "''")}')) {
+  if (Test-Path \$lnk) {
+    \$sc = \$ws.CreateShortcut(\$lnk)
+    \$sc.TargetPath = \$target
+    \$sc.IconLocation = "\$ico,0"
+    \$sc.Save()
   }
 }
 ''';
