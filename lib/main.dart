@@ -18,6 +18,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image/image.dart' as img;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -5630,10 +5631,90 @@ class _BackupScreenState extends State<BackupScreen> {
     final folder = Directory(p.join(dir.path, 'personalizzazione'));
     if (!await folder.exists()) await folder.create(recursive: true);
 
+    if (tipo == 'icona') {
+      // L'icona viene sempre convertita in ICO, così Windows può usarla
+      // anche per i collegamenti creati dall'installer.
+      final icoPath = p.join(folder.path, 'icona_programma.ico');
+      if (p.extension(source.path).toLowerCase() == '.ico') {
+        await source.copy(icoPath);
+      } else {
+        final bytes = await source.readAsBytes();
+        final decoded = img.decodeImage(bytes);
+        if (decoded == null) {
+          throw Exception('Immagine icona non valida.');
+        }
+        final resized = img.copyResize(decoded, width: 256, height: 256);
+        final pngBytes = img.encodePng(resized);
+        await File(icoPath).writeAsBytes(_pngToIco(pngBytes), flush: true);
+      }
+      if (Platform.isWindows) {
+        await _aggiornaIconaInstallazione(icoPath);
+      }
+      return icoPath;
+    }
+
     final ext = p.extension(source.path).isEmpty ? '.png' : p.extension(source.path);
     final destination = File(p.join(folder.path, '${tipo}_personalizzato$ext'));
     await source.copy(destination.path);
     return destination.path;
+  }
+
+  List<int> _pngToIco(List<int> pngBytes) {
+    final data = <int>[
+      0, 0, // reserved
+      1, 0, // type: icon
+      1, 0, // one image
+      0, // width 256
+      0, // height 256
+      0, // palette
+      0, // reserved
+      1, 0, // color planes
+      32, 0, // bits per pixel
+      ..._u32le(pngBytes.length),
+      22, 0, 0, 0, // PNG data offset
+      ...pngBytes,
+    ];
+    return data;
+  }
+
+  List<int> _u32le(int value) => [
+        value & 0xff,
+        (value >> 8) & 0xff,
+        (value >> 16) & 0xff,
+        (value >> 24) & 0xff,
+      ];
+
+  Future<void> _aggiornaIconaInstallazione(String icoPath) async {
+    if (!Platform.isWindows) return;
+    final exePath = Platform.resolvedExecutable;
+    final desktop = p.join(Platform.environment['USERPROFILE'] ?? '', 'Desktop', 'Gestione Preventivi.lnk');
+    final startMenu = p.join(Platform.environment['APPDATA'] ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Gestione Preventivi.lnk');
+    final script = '''
+$ws = New-Object -ComObject WScript.Shell
+$ico = '${icoPath.replaceAll("'", "''")}'
+$target = '${exePath.replaceAll("'", "''")}'
+foreach ($lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll("'", "''")}')) {
+  if (Test-Path $lnk) {
+    $sc = $ws.CreateShortcut($lnk)
+    $sc.TargetPath = $target
+    $sc.IconLocation = "$ico,0"
+    $sc.Save()
+  }
+}
+''';
+    try {
+      await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        script,
+      ]);
+    } catch (_) {
+      // L'app continua a funzionare anche se Windows non consente
+      // l'aggiornamento automatico dei collegamenti.
+    }
   }
 
   Future<void> _salvaImpostazioni() async {
@@ -5837,7 +5918,7 @@ class _BackupScreenState extends State<BackupScreen> {
                   ],
                   const SizedBox(height: 8),
                   const Text(
-                    'L’immagine scelta viene salvata come icona personalizzata. Per Android e Windows l’icona del programma viene applicata alla successiva compilazione dell’app; la scelta resta memorizzata nell’app.',
+                    'L’immagine scelta viene salvata come icona personalizzata. Su Windows, quando l’app è installata, vengono aggiornati automaticamente i collegamenti di Gestione Preventivi con la nuova icona. Per Android e per l’icona incorporata nell’EXE l’immagine viene usata alla successiva compilazione.',
                     style: TextStyle(fontSize: 12.5),
                   ),
                   const SizedBox(height: 10),
