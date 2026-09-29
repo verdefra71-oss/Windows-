@@ -1076,7 +1076,7 @@ class PdfGenerator {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               if (logoAzienda != null)
-                pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda!, fit: pw.BoxFit.contain)),
+                pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda, fit: pw.BoxFit.contain)),
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1302,7 +1302,6 @@ class PdfGenerator {
       return sum + prezzo * quantita;
     });
     final iva = imponibile * ivaPercent / 100;
-    final totale = imponibile + iva;
     final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
     final gold = PdfColor.fromHex('#B8860B');
 
@@ -1338,7 +1337,7 @@ class PdfGenerator {
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (logoAzienda != null) pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda!, fit: pw.BoxFit.contain)),
+              if (logoAzienda != null) pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda, fit: pw.BoxFit.contain)),
               pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                 if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['ragione_sociale'] ?? '').toString(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
                 if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
@@ -1380,7 +1379,7 @@ class PdfGenerator {
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 ),
                 if ((datiAzienda['iban'] ?? '').toString().trim().isNotEmpty) ...[
-                  const pw.SizedBox(height: 4),
+                  pw.SizedBox(height: 4),
                   pw.Text('IBAN: ${(datiAzienda['iban'] ?? '').toString()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                 ],
               ],
@@ -2175,13 +2174,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     child: Row(
                       children: [
-                        Expanded(
+                        const Expanded(
                           child: SizedBox(
-                            height: compact ? 102 : 126,
-                            child: Image.asset(
-                              'assets/logo.png',
-                              fit: BoxFit.contain,
+                            height: 102,
+                            child: Align(
                               alignment: Alignment.centerLeft,
+                              child: Text(
+                                'GESTIONE
+PREVENTIVI',
+                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                              ),
                             ),
                           ),
                         ),
