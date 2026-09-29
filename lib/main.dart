@@ -1301,7 +1301,6 @@ class PdfGenerator {
       final quantita = (x['quantita'] as num?)?.toDouble() ?? 1;
       return sum + prezzo * quantita;
     });
-    final iva = imponibile * ivaPercent / 100;
     final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
     final gold = PdfColor.fromHex('#B8860B');
 
@@ -2180,8 +2179,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                'GESTIONE
-PREVENTIVI',
+                                'GESTIONE\nPREVENTIVI',
                                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
                               ),
                             ),
