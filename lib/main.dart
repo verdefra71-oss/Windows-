@@ -2182,12 +2182,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                   ),
                                 if (_logoPath.isNotEmpty) const SizedBox(width: 14),
-                                const Text(
-                                  'GESTIONE PREVENTIVI',
+                                const Expanded(
+                                    child: Text(
+                                      'I tuoi preventivi ordinati a portata di mano',
                                   style: TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w700,
-                                    letterSpacing: .4,
+                                      letterSpacing: .2,
+                                    ),
                                   ),
                                 ),
                               ],
