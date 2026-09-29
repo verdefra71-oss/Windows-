@@ -18,7 +18,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:image/image.dart' as img;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -159,6 +158,7 @@ class TrialService {
   static const String _activatedKey = 'demo_activated';
   static const String _usedKeysKey = 'used_activation_keys';
   static const String _activationTypeKey = 'activation_type';
+  static const String _activationKeyStorage = 'activation_key';
 
   static Future<void> ensureStarted() async {
     final prefs = await SharedPreferences.getInstance();
@@ -188,6 +188,7 @@ class TrialService {
     if (normalized == supervisorKey) {
       await prefs.setBool(_activatedKey, true);
       await prefs.setString(_activationTypeKey, 'supervisor');
+      await prefs.setString(_activationKeyStorage, normalized);
       return 'ok';
     }
 
@@ -204,11 +205,45 @@ class TrialService {
     await prefs.setStringList(_usedKeysKey, used);
     await prefs.setBool(_activatedKey, true);
     await prefs.setString(_activationTypeKey, 'one_time');
+    await prefs.setString(_activationKeyStorage, normalized);
     return 'ok';
   }
 
   static Future<bool> activate(String key) async {
     return (await activateResult(key)) == 'ok';
+  }
+
+  static Future<Map<String, dynamic>> backupLicenseData() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'activated': prefs.getBool(_activatedKey) ?? false,
+      'activationType': prefs.getString(_activationTypeKey) ?? '',
+      'activationKey': prefs.getString(_activationKeyStorage) ?? '',
+      'usedKeys': prefs.getStringList(_usedKeysKey) ?? <String>[],
+      'demoStartedAt': prefs.getInt(_startKey),
+    };
+  }
+
+  static Future<void> restoreLicenseData(Map<String, dynamic> data) async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentlyActivated = prefs.getBool(_activatedKey) ?? false;
+    if (currentlyActivated) return;
+    if (data['activated'] != true) return;
+
+    final key = (data['activationKey'] ?? '').toString().trim();
+    if (key.isEmpty) return;
+    // Accettiamo dal backup solo una chiave realmente riconosciuta
+    // dall'app, evitando che un JSON modificato possa attivarla.
+    if (key != supervisorKey && !oneTimeKeys.contains(key)) return;
+    final type = (data['activationType'] ?? '').toString();
+    await prefs.setBool(_activatedKey, true);
+    await prefs.setString(_activationTypeKey, type.isEmpty ? 'one_time' : type);
+    await prefs.setString(_activationKeyStorage, key);
+    final used = List<String>.from(
+      (data['usedKeys'] as List? ?? const []).map((e) => e.toString()),
+    );
+    if (type == 'one_time' && !used.contains(key)) used.add(key);
+    if (used.isNotEmpty) await prefs.setStringList(_usedKeysKey, used);
   }
 
   static Future<int> daysRemaining() async {
@@ -1133,6 +1168,18 @@ CREATE TABLE impostazioni (
   }
 
 
+  static const String _aziendaImportataLockKey = 'azienda_importata_lock';
+
+  Future<bool> isAziendaImportataBloccata() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_aziendaImportataLockKey) ?? false;
+  }
+
+  Future<void> bloccaDatiAziendaImportati() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_aziendaImportataLockKey, true);
+  }
+
   Future<Map<String, dynamic>> getImpostazioni() async {
     final db = await database;
     final rows = await db.query('impostazioni', where: 'id = 1', limit: 1);
@@ -1152,6 +1199,9 @@ CREATE TABLE impostazioni (
   }
 
   Future<void> salvaImpostazioni(Map<String, dynamic> values) async {
+    if (await isAziendaImportataBloccata()) {
+      throw StateError('I dati azienda sono protetti perché importati da un backup.');
+    }
     final db = await database;
     await db.insert(
       'impostazioni',
@@ -1173,6 +1223,8 @@ CREATE TABLE impostazioni (
       'fatture': await db.query('fatture'),
       'acconti': await getAcconti(),
       'impostazioni': await getImpostazioni(),
+      'licenza': await TrialService.backupLicenseData(),
+      'aziendaImportataBloccata': await isAziendaImportataBloccata(),
     };
   }
 
@@ -1220,6 +1272,7 @@ CREATE TABLE impostazioni (
     // se l'id non esiste, la riga viene aggiunta con un nuovo id.
     // In questo modo i dati presenti sul dispositivo che non sono nel
     // backup non vengono mai cancellati.
+    bool aziendaImportataOra = false;
     await db.transaction((txn) async {
       Future<void> mergeRows(
         String table,
@@ -1282,7 +1335,8 @@ CREATE TABLE impostazioni (
       await mergeRows('preventivi', preventivi);
       await mergeRows('fatture', fatture);
       final settings = decoded['impostazioni'];
-      if (settings is Map) {
+      final aziendaGiaBloccata = await isAziendaImportataBloccata();
+      if (settings is Map && !aziendaGiaBloccata) {
         final values = Map<String, dynamic>.from(settings);
         values['id'] = 1;
         await txn.insert(
@@ -1290,8 +1344,21 @@ CREATE TABLE impostazioni (
           values,
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
+        aziendaImportataOra = true;
       }
     });
+
+    // Un backup può trasferire anche la licenza. Se l'app corrente è già
+    // attivata, la sua licenza non viene mai sostituita.
+    final licenza = decoded['licenza'];
+    if (licenza is Map) {
+      await TrialService.restoreLicenseData(Map<String, dynamic>.from(licenza));
+    }
+
+    // I dati azienda importati diventano non modificabili nell'app.
+    if (aziendaImportataOra) {
+      await bloccaDatiAziendaImportati();
+    }
     await createAutomaticBackup();
   }
 
@@ -6000,6 +6067,7 @@ class BackupScreen extends StatefulWidget {
 class _BackupScreenState extends State<BackupScreen> {
   bool busy = false;
   bool _appActivated = false;
+  bool _aziendaBloccata = false;
   String? lastMessage;
 
   final _ragione = TextEditingController();
@@ -6011,7 +6079,6 @@ class _BackupScreenState extends State<BackupScreen> {
   final _iban = TextEditingController();
   final _activationKey = TextEditingController();
   String _logoPath = '';
-  String _iconaPath = '';
 
   @override
   void initState() {
@@ -6035,6 +6102,7 @@ class _BackupScreenState extends State<BackupScreen> {
   Future<void> _caricaImpostazioni() async {
     final d = await DatabaseHelper.instance.getImpostazioni();
     final activated = await TrialService.isActivated();
+    final aziendaBloccata = await DatabaseHelper.instance.isAziendaImportataBloccata();
     if (!mounted) return;
     setState(() {
       _ragione.text = (d['ragione_sociale'] ?? '').toString();
@@ -6046,15 +6114,16 @@ class _BackupScreenState extends State<BackupScreen> {
       _iban.text = (d['iban'] ?? '').toString();
       _activationKey.text = '';
       _appActivated = activated;
+      _aziendaBloccata = aziendaBloccata;
       _logoPath = (d['logo_path'] ?? '').toString();
-      _iconaPath = (d['icona_path'] ?? '').toString();
     });
   }
 
-  Future<String?> _scegliImmagine(String tipo) async {
+  Future<String?> _scegliLogo() async {
+    if (_aziendaBloccata) return null;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'ico'],
+      allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
     );
     if (result == null || result.files.single.path == null) return null;
 
@@ -6063,93 +6132,17 @@ class _BackupScreenState extends State<BackupScreen> {
     final folder = Directory(p.join(dir.path, 'personalizzazione'));
     if (!await folder.exists()) await folder.create(recursive: true);
 
-    if (tipo == 'icona') {
-      // L'icona viene sempre convertita in ICO, così Windows può usarla
-      // anche per i collegamenti creati dall'installer.
-      final icoPath = p.join(folder.path, 'icona_programma.ico');
-      if (p.extension(source.path).toLowerCase() == '.ico') {
-        await source.copy(icoPath);
-      } else {
-        final bytes = await source.readAsBytes();
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null) {
-          throw Exception('Immagine icona non valida.');
-        }
-        final resized = img.copyResize(decoded, width: 256, height: 256);
-        final pngBytes = img.encodePng(resized);
-        await File(icoPath).writeAsBytes(_pngToIco(pngBytes), flush: true);
-      }
-      if (Platform.isWindows) {
-        await _aggiornaIconaInstallazione(icoPath);
-      }
-      return icoPath;
-    }
-
     final ext = p.extension(source.path).isEmpty ? '.png' : p.extension(source.path);
-    final destination = File(p.join(folder.path, '${tipo}_personalizzato$ext'));
+    final destination = File(p.join(folder.path, 'logo_personalizzato$ext'));
     await source.copy(destination.path);
     return destination.path;
   }
 
-  List<int> _pngToIco(List<int> pngBytes) {
-    final data = <int>[
-      0, 0, // reserved
-      1, 0, // type: icon
-      1, 0, // one image
-      0, // width 256
-      0, // height 256
-      0, // palette
-      0, // reserved
-      1, 0, // color planes
-      32, 0, // bits per pixel
-      ..._u32le(pngBytes.length),
-      22, 0, 0, 0, // PNG data offset
-      ...pngBytes,
-    ];
-    return data;
-  }
-
-  List<int> _u32le(int value) => [
-        value & 0xff,
-        (value >> 8) & 0xff,
-        (value >> 16) & 0xff,
-        (value >> 24) & 0xff,
-      ];
-
-  Future<void> _aggiornaIconaInstallazione(String icoPath) async {
-    if (!Platform.isWindows) return;
-    final exePath = Platform.resolvedExecutable;
-    final desktop = p.join(Platform.environment['USERPROFILE'] ?? '', 'Desktop', 'Gestione Preventivi.lnk');
-    final startMenu = p.join(Platform.environment['APPDATA'] ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Gestione Preventivi.lnk');
-    final script = '''
-\$ws = New-Object -ComObject WScript.Shell
-\$ico = '${icoPath.replaceAll("'", "''")}'
-\$target = '${exePath.replaceAll("'", "''")}'
-foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll("'", "''")}')) {
-  if (Test-Path \$lnk) {
-    \$sc = \$ws.CreateShortcut(\$lnk)
-    \$sc.TargetPath = \$target
-    \$sc.IconLocation = "\$ico,0"
-    \$sc.Save()
-  }
-}
-''';
-    try {
-      await Process.run('powershell.exe', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        script,
-      ]);
-    } catch (_) {
-      // L'app continua a funzionare anche se Windows non consente
-      // l'aggiornamento automatico dei collegamenti.
-    }
-  }
-
   Future<void> _salvaImpostazioni() async {
+    if (_aziendaBloccata) {
+      setState(() => lastMessage = 'I dati azienda sono bloccati perché importati da un backup.');
+      return;
+    }
     setState(() => busy = true);
     try {
       await DatabaseHelper.instance.salvaImpostazioni({
@@ -6161,7 +6154,6 @@ foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll(
         'codice_fiscale': _cf.text.trim(),
         'iban': _iban.text.trim(),
         'logo_path': _logoPath,
-        'icona_path': _iconaPath,
       });
       if (mounted) {
         setState(() => lastMessage =
@@ -6247,6 +6239,7 @@ foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll(
       child: TextField(
         controller: c,
         keyboardType: keyboardType,
+        readOnly: _aziendaBloccata,
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon),
@@ -6268,9 +6261,20 @@ foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Dati inseriti manualmente',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Dati inseriti manualmente',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      if (_aziendaBloccata)
+                        const Chip(
+                          avatar: Icon(Icons.lock_outline, size: 16),
+                          label: Text('Protetti'),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   const Text(
@@ -6301,63 +6305,27 @@ foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll(
                     trailing: IconButton(
                       tooltip: 'Seleziona logo',
                       icon: const Icon(Icons.folder_open),
-                      onPressed: busy
+                      onPressed: busy || _aziendaBloccata
                           ? null
                           : () async {
-                              final path = await _scegliImmagine('logo');
+                              final path = await _scegliLogo();
                               if (path != null && mounted) setState(() => _logoPath = path);
                             },
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.app_settings_alt_outlined),
-                    title: const Text('Immagine icona programma'),
-                    subtitle: Text(
-                      _iconaPath.isEmpty
-                          ? 'Nessuna immagine selezionata'
-                          : _iconaPath,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Seleziona immagine icona',
-                      icon: const Icon(Icons.folder_open),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              final path = await _scegliImmagine('icona');
-                              if (path != null && mounted) setState(() => _iconaPath = path);
-                            },
-                    ),
-                  ),
-                  if (_iconaPath.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  if (_aziendaBloccata) ...[
                     const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.file(
-                          File(_iconaPath),
-                          width: 72,
-                          height: 72,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                        ),
-                      ),
+                    const Text(
+                      'I dati azienda importati da questo backup sono protetti e non possono essere modificati.',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                     ),
                   ],
-                  const SizedBox(height: 8),
-                  const Text(
-                    'L’immagine scelta viene salvata come icona personalizzata. Su Windows, quando l’app è installata, vengono aggiornati automaticamente i collegamenti di Gestione Preventivi con la nuova icona. Per Android e per l’icona incorporata nell’EXE l’immagine viene usata alla successiva compilazione.',
-                    style: TextStyle(fontSize: 12.5),
-                  ),
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: busy ? null : _salvaImpostazioni,
+                      onPressed: busy || _aziendaBloccata ? null : _salvaImpostazioni,
                       icon: const Icon(Icons.save_rounded),
                       label: const Text('SALVA DATI'),
                     ),
