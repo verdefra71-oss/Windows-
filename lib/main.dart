@@ -2588,7 +2588,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 if (_logoPath.isNotEmpty) const SizedBox(width: 14),
                                 const Expanded(
                                     child: Text(
-                                      'I tuoi preventivi ordinati a portata di mano',
+                                      'Tutto il tuo lavoro, semplice e ordinato.',
                                   style: TextStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w700,
