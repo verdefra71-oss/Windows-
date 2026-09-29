@@ -2182,6 +2182,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                   ),
                                 if (_logoPath.isNotEmpty) const SizedBox(width: 14),
+                                const Text(
+                                  'GESTIONE PREVENTIVI',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: .4,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
