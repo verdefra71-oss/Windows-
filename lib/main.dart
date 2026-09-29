@@ -1657,65 +1657,69 @@ class PdfGenerator {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(30, 28, 30, 28),
         build: (_) => [
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              if (logoAzienda != null)
-                pw.Container(
-                  width: 72,
-                  height: 66,
-                  margin: const pw.EdgeInsets.only(right: 12),
-                  child: pw.Image(logoAzienda, fit: pw.BoxFit.contain),
-                ),
-              pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty)
-                  pw.SizedBox(
-                    height: 22,
-                    width: double.infinity,
-                    child: pw.FittedBox(
-                      fit: pw.BoxFit.scaleDown,
-                      alignment: pw.Alignment.centerLeft,
-                      child: pw.Text(
-                        (datiAzienda['ragione_sociale'] ?? '').toString(),
-                        maxLines: 1,
-                        softWrap: false,
-                        style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
-                if ((datiAzienda['telefono'] ?? '').toString().trim().isNotEmpty) pw.Text('Tel: ${(datiAzienda['telefono'] ?? '').toString()}'),
-                if ((datiAzienda['email'] ?? '').toString().trim().isNotEmpty) pw.Text('Email: ${(datiAzienda['email'] ?? '').toString()}'),
-                if ((datiAzienda['partita_iva'] ?? '').toString().trim().isNotEmpty) pw.Text('P. IVA: ${(datiAzienda['partita_iva'] ?? '').toString()}'),
-                if ((datiAzienda['codice_fiscale'] ?? '').toString().trim().isNotEmpty) pw.Text('C.F.: ${(datiAzienda['codice_fiscale'] ?? '').toString()}'),
-              ])),
-
-            ],
-          ),
-          pw.SizedBox(height: 8),
+          // Intestazione: logo e dati aziendali a sinistra; numero, bollo e data
+          // sempre in alto a destra, all'inizio della pagina.
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Expanded(
-                child: pw.Text(
-                  'FATTURA PRO-FORMA',
-                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: gold),
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    if (logoAzienda != null)
+                      pw.Container(
+                        width: 72,
+                        height: 66,
+                        margin: const pw.EdgeInsets.only(right: 12),
+                        child: pw.Image(logoAzienda, fit: pw.BoxFit.contain),
+                      ),
+                    pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                      if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty)
+                        pw.SizedBox(
+                          height: 22,
+                          width: double.infinity,
+                          child: pw.FittedBox(
+                            fit: pw.BoxFit.scaleDown,
+                            alignment: pw.Alignment.centerLeft,
+                            child: pw.Text(
+                              (datiAzienda['ragione_sociale'] ?? '').toString(),
+                              maxLines: 1,
+                              softWrap: false,
+                              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
+                      if ((datiAzienda['telefono'] ?? '').toString().trim().isNotEmpty) pw.Text('Tel: ${(datiAzienda['telefono'] ?? '').toString()}'),
+                      if ((datiAzienda['email'] ?? '').toString().trim().isNotEmpty) pw.Text('Email: ${(datiAzienda['email'] ?? '').toString()}'),
+                      if ((datiAzienda['partita_iva'] ?? '').toString().trim().isNotEmpty) pw.Text('P. IVA: ${(datiAzienda['partita_iva'] ?? '').toString()}'),
+                      if ((datiAzienda['codice_fiscale'] ?? '').toString().trim().isNotEmpty) pw.Text('C.F.: ${(datiAzienda['codice_fiscale'] ?? '').toString()}'),
+                    ])),
+                  ],
                 ),
               ),
-              pw.SizedBox(width: 12),
+              pw.SizedBox(width: 14),
               pw.Container(
-                width: 190,
+                width: 180,
                 alignment: pw.Alignment.topRight,
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('marca da bollo assolta in originale'),
+                    pw.SizedBox(height: 3),
+                    pw.Text('marca da bollo assolta in originale', textAlign: pw.TextAlign.right),
+                    pw.SizedBox(height: 3),
                     pw.Text('Data: $data'),
                   ],
                 ),
               ),
             ],
+          ),
+          pw.SizedBox(height: 8),
+          // Titolo sotto il blocco logo/dati aziendali.
+          pw.Text(
+            'FATTURA PRO-FORMA',
+            style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: gold),
           ),
           pw.SizedBox(height: 14),
           pw.Text('DATI DESTINATARIO', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
