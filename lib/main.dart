@@ -1662,9 +1662,9 @@ class PdfGenerator {
             children: [
               if (logoAzienda != null)
                 pw.Container(
-                  width: 58,
-                  height: 30,
-                  margin: const pw.EdgeInsets.only(right: 10),
+                  width: 72,
+                  height: 66,
+                  margin: const pw.EdgeInsets.only(right: 12),
                   child: pw.Image(logoAzienda, fit: pw.BoxFit.contain),
                 ),
               pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
@@ -1710,7 +1710,41 @@ class PdfGenerator {
           if (value('codice_fiscale').isNotEmpty) pw.Text('Codice Fiscale: ${value('codice_fiscale')}'),
           pw.SizedBox(height: 5),
           pw.Text('Cliente: $cliente', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 20),
+          pw.SizedBox(height: 18),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColor.fromHex('#D8C98A')),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(1),
+              1: const pw.FixedColumnWidth(42),
+              2: const pw.FixedColumnWidth(65),
+              3: const pw.FixedColumnWidth(70),
+            },
+            children: rows,
+          ),
+          pw.SizedBox(height: 14),
+          pw.Container(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text('Imponibile: € ${articoli.fold<double>(0, (sum, a) => sum + (((a['prezzo'] as num?)?.toDouble() ?? 0) * ((a['quantita'] as num?)?.toDouble() ?? 1))).toStringAsFixed(2)}'),
+                if (ivaPercent == 0)
+                  pw.Text('FUORI CAMPO IVA FCI', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))
+                else
+                  pw.Text('IVA ${ivaPercent.toStringAsFixed(0)}%: € ${(articoli.fold<double>(0, (sum, a) => sum + (((a['prezzo'] as num?)?.toDouble() ?? 0) * ((a['quantita'] as num?)?.toDouble() ?? 1))) * ivaPercent / 100).toStringAsFixed(2)}'),
+                pw.SizedBox(height: 5),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: pw.BoxDecoration(color: gold),
+                  child: pw.Text(
+                    'TOTALE: € ${(articoli.fold<double>(0, (sum, a) => sum + (((a['prezzo'] as num?)?.toDouble() ?? 0) * ((a['quantita'] as num?)?.toDouble() ?? 1))) * (1 + ivaPercent / 100)).toStringAsFixed(2)}',
+                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 18),
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColor.fromHex('#D8C98A'))),
