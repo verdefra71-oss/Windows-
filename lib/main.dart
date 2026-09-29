@@ -5605,7 +5605,6 @@ class _BackupScreenState extends State<BackupScreen> {
   final _cf = TextEditingController();
   final _iban = TextEditingController();
   String _logoPath = '';
-  String _iconaPath = '';
 
   @override
   void initState() {
@@ -5637,7 +5636,6 @@ class _BackupScreenState extends State<BackupScreen> {
       _cf.text = (d['codice_fiscale'] ?? '').toString();
       _iban.text = (d['iban'] ?? '').toString();
       _logoPath = (d['logo_path'] ?? '').toString();
-      _iconaPath = (d['icona_path'] ?? '').toString();
     });
   }
 
@@ -5671,7 +5669,6 @@ class _BackupScreenState extends State<BackupScreen> {
         'codice_fiscale': _cf.text.trim(),
         'iban': _iban.text.trim(),
         'logo_path': _logoPath,
-        'icona_path': _iconaPath,
       });
       if (mounted) {
         setState(() => lastMessage =
@@ -5816,28 +5813,6 @@ class _BackupScreenState extends State<BackupScreen> {
                           : () async {
                               final path = await _scegliImmagine('logo');
                               if (path != null && mounted) setState(() => _logoPath = path);
-                            },
-                    ),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.apps_outlined),
-                    title: const Text('Icona programma'),
-                    subtitle: Text(
-                      _iconaPath.isEmpty
-                          ? 'Nessuna icona selezionata'
-                          : _iconaPath,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Seleziona icona',
-                      icon: const Icon(Icons.folder_open),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              final path = await _scegliImmagine('icona');
-                              if (path != null && mounted) setState(() => _iconaPath = path);
                             },
                     ),
                   ),
