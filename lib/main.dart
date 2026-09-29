@@ -1990,7 +1990,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
     _iva.dispose();
     _cliente.dispose();
     _iban.dispose();
-    _activationKey.dispose();
     super.dispose();
   }
 
