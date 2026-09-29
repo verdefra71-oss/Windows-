@@ -42,6 +42,43 @@ jobs:
           echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
           echo "Flutter project: $APP_DIR"
 
+      - name: Install Android NDK reliably
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+
+          # Remove any partially downloaded/corrupt NDK archive from the runner cache.
+          rm -rf "$SDK_ROOT/ndk/27.0.12077973" || true
+          rm -rf "$HOME/.android/cache" || true
+          mkdir -p "$HOME/.android/cache"
+
+          # Retry because a transient/corrupt archive download can produce
+          # 'Error on ZipFile unknown archive' during sdkmanager preparation.
+          for attempt in 1 2 3; do
+            echo "Installing NDK 27.0.12077973 (attempt $attempt/3)"
+            if "$SDKMANAGER" --sdk_root="$SDK_ROOT" "ndk;27.0.12077973"; then
+              break
+            fi
+            rm -rf "$SDK_ROOT/ndk/27.0.12077973" || true
+            rm -rf "$HOME/.android/cache" || true
+            mkdir -p "$HOME/.android/cache"
+            sleep 5
+            if [ "$attempt" -eq 3 ]; then
+              echo "NDK installation failed after 3 attempts"
+              exit 1
+            fi
+          done
+
+          test -d "$SDK_ROOT/ndk/27.0.12077973"
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/27.0.12077973" >> "$GITHUB_ENV"
+
       - name: Generate Android platform files
         working-directory: ${{ env.APP_DIR }}
         shell: bash
