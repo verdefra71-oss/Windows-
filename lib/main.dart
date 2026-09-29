@@ -1198,6 +1198,17 @@ CREATE TABLE impostazioni (
     };
   }
 
+  Future<void> salvaLogo(String logoPath) async {
+    final db = await database;
+    await db.update(
+      'impostazioni',
+      {'logo_path': logoPath},
+      where: 'id = ?',
+      whereArgs: [1],
+    );
+    await autoBackup();
+  }
+
   Future<void> salvaImpostazioni(Map<String, dynamic> values) async {
     if (await isAziendaImportataBloccata()) {
       throw StateError('I dati azienda sono protetti perché importati da un backup.');
@@ -6120,7 +6131,6 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<String?> _scegliLogo() async {
-    if (_aziendaBloccata) return null;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
@@ -6135,6 +6145,7 @@ class _BackupScreenState extends State<BackupScreen> {
     final ext = p.extension(source.path).isEmpty ? '.png' : p.extension(source.path);
     final destination = File(p.join(folder.path, 'logo_personalizzato$ext'));
     await source.copy(destination.path);
+    await DatabaseHelper.instance.salvaLogo(destination.path);
     return destination.path;
   }
 
@@ -6305,11 +6316,14 @@ class _BackupScreenState extends State<BackupScreen> {
                     trailing: IconButton(
                       tooltip: 'Seleziona logo',
                       icon: const Icon(Icons.folder_open),
-                      onPressed: busy || _aziendaBloccata
+                      onPressed: busy
                           ? null
                           : () async {
                               final path = await _scegliLogo();
-                              if (path != null && mounted) setState(() => _logoPath = path);
+                              if (path != null && mounted) {
+                                setState(() => _logoPath = path);
+                                setState(() => lastMessage = 'Logo aggiornato. I dati azienda e la licenza restano protetti.');
+                              }
                             },
                     ),
                   ),
