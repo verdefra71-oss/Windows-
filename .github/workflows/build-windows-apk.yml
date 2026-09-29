@@ -118,36 +118,6 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: flutter pub get
 
-      - name: Configure launcher icons
-        working-directory: ${{ env.APP_DIR }}
-        shell: bash
-        run: |
-          set -e
-          test -f assets/app_icon.png
-          cat > flutter_launcher_icons.yaml <<'YAML'
-          android: true
-          ios: false
-          image_path: assets/app_icon.png
-          min_sdk_android: 21
-          adaptive_icon_background: "#FFFFFF"
-          adaptive_icon_foreground: assets/app_icon.png
-          YAML
-          echo "Configurazione launcher creata in flutter_launcher_icons.yaml"
-          cat flutter_launcher_icons.yaml
-
-      - name: Generate Android launcher icons
-        working-directory: ${{ env.APP_DIR }}
-        shell: bash
-        run: |
-          set -e
-          test -f assets/app_icon.png
-          # Usiamo esplicitamente il file di configurazione: così il comando
-          # non dipende da come flutter create ha riscritto il pubspec.yaml.
-          dart run flutter_launcher_icons --file flutter_launcher_icons.yaml
-          test -f android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          echo "Android launcher icon generated from assets/app_icon.png"
-
       - name: Analyze
         working-directory: ${{ env.APP_DIR }}
         run: flutter analyze --no-fatal-infos
@@ -194,21 +164,6 @@ jobs:
           flutter config --enable-windows-desktop
           flutter create --platforms=windows --project-name preventivi_app .
 
-          $icon = Join-Path $env:APP_DIR 'assets\app_icon.ico'
-          $targetDir = Join-Path $env:APP_DIR 'windows\runner\resources'
-          $target = Join-Path $targetDir 'app_icon.ico'
-          if (-not (Test-Path $icon)) { throw "Icona non trovata: $icon" }
-          if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Force $targetDir | Out-Null }
-          Copy-Item $icon $target -Force
-
-          # Assicura che l'eseguibile Windows usi proprio l'icona presente in assets.
-          $rc = Join-Path $env:APP_DIR 'windows\runner\Runner.rc'
-          if (-not (Test-Path $rc)) { throw "Runner.rc non trovato: $rc" }
-          $rcText = Get-Content $rc -Raw
-          $rcText = [regex]::Replace($rcText, '(?m)^IDI_ICON1\s+[^\r\n]+$', 'IDI_ICON1 ICON "resources\\app_icon.ico"')
-          Set-Content -Path $rc -Value $rcText -Encoding ASCII
-          Write-Host "Icona Windows configurata da: $icon"
-
       - name: Get dependencies
         working-directory: ${{ env.APP_DIR }}
         run: flutter pub get
@@ -227,16 +182,6 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         shell: pwsh
         run: flutter build windows --release
-
-      - name: Verify Windows icon and executable
-        shell: pwsh
-        run: |
-          $release = Join-Path '${{ env.APP_DIR }}' 'build\windows\x64\runner\Release'
-          $exe = Join-Path $release 'preventivi_app.exe'
-          if (-not (Test-Path $exe)) { throw "EXE non trovato: $exe" }
-          $icon = Join-Path '${{ env.APP_DIR }}' 'assets\app_icon.ico'
-          if (-not (Test-Path $icon)) { throw "Icona Windows non trovata: $icon" }
-          Write-Host "Windows EXE creato con configurazione icona da $icon"
 
       - name: Create portable ZIP
         shell: pwsh
@@ -267,16 +212,14 @@ jobs:
           Compression=lzma2
           SolidCompression=yes
           ArchitecturesInstallIn64BitMode=x64compatible
-          SetupIconFile=${{ env.APP_DIR }}\assets\app_icon.ico
           UninstallDisplayIcon={app}\preventivi_app.exe
 
           [Files]
           Source: "$release\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
-          Source: "${{ env.APP_DIR }}\assets\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
           [Icons]
-          Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"; IconFilename: "{app}\app_icon.ico"
-          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"; IconFilename: "{app}\app_icon.ico"
+          Name: "{group}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
+          Name: "{commondesktop}\Gestione Preventivi"; Filename: "{app}\preventivi_app.exe"
 
           [Run]
           Filename: "{app}\preventivi_app.exe"; Description: "Avvia Gestione Preventivi"; Flags: nowait postinstall skipifsilent
