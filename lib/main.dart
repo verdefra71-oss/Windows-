@@ -284,7 +284,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 13,
+      version: 14,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -336,6 +336,21 @@ CREATE TABLE fatture (
   totale REAL NOT NULL DEFAULT 0,
   pagamento TEXT NOT NULL DEFAULT 'Contanti',
   iban TEXT
+)
+''');
+
+        await db.execute('''
+CREATE TABLE impostazioni (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  ragione_sociale TEXT NOT NULL DEFAULT '',
+  indirizzo TEXT NOT NULL DEFAULT '',
+  telefono TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  partita_iva TEXT NOT NULL DEFAULT '',
+  codice_fiscale TEXT NOT NULL DEFAULT '',
+  iban TEXT NOT NULL DEFAULT '',
+  logo_path TEXT NOT NULL DEFAULT '',
+  icona_path TEXT NOT NULL DEFAULT ''
 )
 ''');
 
@@ -416,6 +431,22 @@ CREATE TABLE fatture (
         }
         if (oldVersion < 13) {
           await db.execute("ALTER TABLE clienti ADD COLUMN appuntamento TEXT");
+        }
+        if (oldVersion < 14) {
+          await db.execute('''
+CREATE TABLE impostazioni (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  ragione_sociale TEXT NOT NULL DEFAULT '',
+  indirizzo TEXT NOT NULL DEFAULT '',
+  telefono TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  partita_iva TEXT NOT NULL DEFAULT '',
+  codice_fiscale TEXT NOT NULL DEFAULT '',
+  iban TEXT NOT NULL DEFAULT '',
+  logo_path TEXT NOT NULL DEFAULT '',
+  icona_path TEXT NOT NULL DEFAULT ''
+)
+''');
         }
       },
     );
@@ -766,6 +797,34 @@ CREATE TABLE fatture (
   }
 
 
+  Future<Map<String, dynamic>> getImpostazioni() async {
+    final db = await database;
+    final rows = await db.query('impostazioni', where: 'id = 1', limit: 1);
+    if (rows.isNotEmpty) return Map<String, dynamic>.from(rows.first);
+    return {
+      'id': 1,
+      'ragione_sociale': '',
+      'indirizzo': '',
+      'telefono': '',
+      'email': '',
+      'partita_iva': '',
+      'codice_fiscale': '',
+      'iban': '',
+      'logo_path': '',
+      'icona_path': '',
+    };
+  }
+
+  Future<void> salvaImpostazioni(Map<String, dynamic> values) async {
+    final db = await database;
+    await db.insert(
+      'impostazioni',
+      {'id': 1, ...values},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await autoBackup();
+  }
+
   Future<Map<String, dynamic>> _backupData() async {
     final db = await database;
     return {
@@ -777,6 +836,7 @@ CREATE TABLE fatture (
       'preventivi': await db.query('preventivi'),
       'fatture': await db.query('fatture'),
       'acconti': await getAcconti(),
+      'impostazioni': await getImpostazioni(),
     };
   }
 
@@ -885,6 +945,16 @@ CREATE TABLE fatture (
       await mergeRows('prodotti', prodotti);
       await mergeRows('preventivi', preventivi);
       await mergeRows('fatture', fatture);
+      final settings = decoded['impostazioni'];
+      if (settings is Map) {
+        final values = Map<String, dynamic>.from(settings);
+        values['id'] = 1;
+        await txn.insert(
+          'impostazioni',
+          values,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
     });
     await createAutomaticBackup();
   }
@@ -917,13 +987,16 @@ class PdfGenerator {
         bold: pw.Font.ttf(boldFontData),
       ),
     );
-    pw.MemoryImage? logo;
+    final datiAzienda = await DatabaseHelper.instance.getImpostazioni();
+    pw.MemoryImage? logoAzienda;
+    final logoPath = (datiAzienda['logo_path'] ?? '').toString().trim();
+    if (logoPath.isNotEmpty) {
+      try {
+        final file = File(logoPath);
+        if (await file.exists()) logoAzienda = pw.MemoryImage(await file.readAsBytes());
+      } catch (_) {}
+    }
     Map<String, dynamic>? datiCliente;
-
-    try {
-      final bytes = await rootBundle.load('assets/logo.png');
-      logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
-    } catch (_) {}
 
     // Recupera l'anagrafica completa per stampare tutti i dati del cliente.
     try {
@@ -999,48 +1072,33 @@ class PdfGenerator {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(30, 28, 30, 28),
         build: (_) => [
-          // Logo ingrandito: circa il doppio rispetto alla versione precedente.
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (logo != null)
-                pw.SizedBox(
-                  width: 285,
-                  height: 190,
-                  child: pw.Image(logo, fit: pw.BoxFit.contain),
-                )
-              else
-                pw.SizedBox(
-                  width: 285,
-                  height: 150,
-                  child: pw.Text(
-                    'BTS',
-                    style: pw.TextStyle(
-                      fontSize: 38,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ),
-              pw.SizedBox(width: 18),
+              if (logoAzienda != null)
+                pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda!, fit: pw.BoxFit.contain)),
               pw.Expanded(
                 child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(
-                      accettato ? 'RICEVUTA' : 'PREVENTIVO',
-                      style: pw.TextStyle(
-                        fontSize: 22,
-                        fontWeight: pw.FontWeight.bold,
-                        color: dark,
-                      ),
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.Divider(color: gold),
-                    pw.SizedBox(height: 8),
-                    pw.Text('N. $numero', style: const pw.TextStyle(fontSize: 11)),
-                    pw.Text('Data: $data', style: const pw.TextStyle(fontSize: 11)),
+                    if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty)
+                      pw.Text((datiAzienda['ragione_sociale'] ?? '').toString(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
+                    if ((datiAzienda['telefono'] ?? '').toString().trim().isNotEmpty) pw.Text('Tel: ${(datiAzienda['telefono'] ?? '').toString()}'),
+                    if ((datiAzienda['email'] ?? '').toString().trim().isNotEmpty) pw.Text('Email: ${(datiAzienda['email'] ?? '').toString()}'),
+                    if ((datiAzienda['partita_iva'] ?? '').toString().trim().isNotEmpty) pw.Text('P. IVA: ${(datiAzienda['partita_iva'] ?? '').toString()}'),
+                    if ((datiAzienda['codice_fiscale'] ?? '').toString().trim().isNotEmpty) pw.Text('C.F.: ${(datiAzienda['codice_fiscale'] ?? '').toString()}'),
                   ],
                 ),
+              ),
+              pw.SizedBox(width: 12),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(accettato ? 'RICEVUTA' : 'PREVENTIVO', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: dark)),
+                  pw.Text('N. $numero', style: const pw.TextStyle(fontSize: 11)),
+                  pw.Text('Data: $data', style: const pw.TextStyle(fontSize: 11)),
+                ],
               ),
             ],
           ),
@@ -1180,6 +1238,13 @@ class PdfGenerator {
               ),
             ),
           ],
+          if ((datiAzienda['iban'] ?? '').toString().trim().isNotEmpty)
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: gold), borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5))),
+              child: pw.Text('IBAN: ${(datiAzienda['iban'] ?? '').toString()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            ),
           pw.SizedBox(height: 25),
           pw.Divider(color: gold),
           pw.SizedBox(height: 6),
@@ -1213,12 +1278,16 @@ class PdfGenerator {
         bold: pw.Font.ttf(boldFontData),
       ),
     );
-    pw.MemoryImage? logo;
+    final datiAzienda = await DatabaseHelper.instance.getImpostazioni();
+    pw.MemoryImage? logoAzienda;
+    final logoPath = (datiAzienda['logo_path'] ?? '').toString().trim();
+    if (logoPath.isNotEmpty) {
+      try {
+        final file = File(logoPath);
+        if (await file.exists()) logoAzienda = pw.MemoryImage(await file.readAsBytes());
+      } catch (_) {}
+    }
     Map<String, dynamic>? datiCliente;
-    try {
-      final bytes = await rootBundle.load('assets/logo.png');
-      logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
-    } catch (_) {}
     try {
       final clienti = await DatabaseHelper.instance.getClienti();
       final matches = clienti.where(
@@ -1268,45 +1337,23 @@ class PdfGenerator {
         build: (_) => [
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  if (logo != null)
-                    pw.SizedBox(
-                      width: 285,
-                      height: 125,
-                      child: pw.Image(logo, fit: pw.BoxFit.contain),
-                    )
-                  else
-                    pw.SizedBox(
-                      width: 285,
-                      height: 90,
-                      child: pw.Text(
-                        'BTS',
-                        style: pw.TextStyle(fontSize: 38, fontWeight: pw.FontWeight.bold),
-                      ),
-                    ),
-                  pw.SizedBox(height: 6),
-                  pw.Text(
-                    'FATTURA PRO-FORMA',
-                    style: pw.TextStyle(
-                      fontSize: 20,
-                      fontWeight: pw.FontWeight.bold,
-                      color: gold,
-                    ),
-                  ),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Data: $data'),
-                  pw.Text('marca da bollo assolta in originale'),
-                ],
-              ),
+              if (logoAzienda != null) pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda!, fit: pw.BoxFit.contain)),
+              pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['ragione_sociale'] ?? '').toString(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
+                if ((datiAzienda['telefono'] ?? '').toString().trim().isNotEmpty) pw.Text('Tel: ${(datiAzienda['telefono'] ?? '').toString()}'),
+                if ((datiAzienda['email'] ?? '').toString().trim().isNotEmpty) pw.Text('Email: ${(datiAzienda['email'] ?? '').toString()}'),
+                if ((datiAzienda['partita_iva'] ?? '').toString().trim().isNotEmpty) pw.Text('P. IVA: ${(datiAzienda['partita_iva'] ?? '').toString()}'),
+                if ((datiAzienda['codice_fiscale'] ?? '').toString().trim().isNotEmpty) pw.Text('C.F.: ${(datiAzienda['codice_fiscale'] ?? '').toString()}'),
+              ])),
+              pw.SizedBox(width: 12),
+              pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+                pw.Text('FATTURA PRO-FORMA', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: gold)),
+                pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Data: $data'),
+                pw.Text('marca da bollo assolta in originale'),
+              ]),
             ],
           ),
           pw.SizedBox(height: 18),
@@ -1322,57 +1369,20 @@ class PdfGenerator {
           pw.SizedBox(height: 5),
           pw.Text('Cliente: $cliente', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 20),
-          pw.Table(
-            border: pw.TableBorder.all(color: PdfColor.fromHex('#D8C98A')),
-            columnWidths: {0: const pw.FlexColumnWidth(4), 1: const pw.FlexColumnWidth(1), 2: const pw.FlexColumnWidth(1.5), 3: const pw.FlexColumnWidth(1.7)},
-            children: rows,
-          ),
-          pw.SizedBox(height: 18),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Container(
-              width: 220,
-              child: pw.Column(children: [
-                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('Imponibile'), pw.Text('${imponibile.toStringAsFixed(2)} €')]),
-                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('IVA ${ivaPercent.toStringAsFixed(2)}%'), pw.Text('${iva.toStringAsFixed(2)} €')]),
-                pw.Divider(color: gold),
-                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                  pw.Text('TOTALE', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('${totale.toStringAsFixed(2)} €', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: gold)),
-                ]),
-              ]),
-            ),
-          ),
-          pw.SizedBox(height: 20),
-          pw.Container(
-            width: double.infinity,
-            padding: const pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColor.fromHex('#D8C98A'))),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('DATI AZIENDA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: gold)),
-                pw.SizedBox(height: 4),
-                pw.Text('di CARPENTIERI ALFONSO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.Text('Sede legale: via Ugo Pirro, 9 - 84100 Salerno'),
-                pw.Text('Cell. 328 697 2865'),
-                pw.Text('P. IVA 06051430657'),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 10),
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColor.fromHex('#D8C98A'))),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('Metodo di pagamento: $pagamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                if (pagamento == 'Bonifico')
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.only(top: 4),
-                    child: pw.Text('IBAN: ${((iban ?? '').trim().isEmpty ? 'IT28F0538715206000003630167' : iban!.trim())}'),
-                  ),
+                pw.Text(
+                  'Metodo di pagamento: $pagamento',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                if ((datiAzienda['iban'] ?? '').toString().trim().isNotEmpty) ...[
+                  const pw.SizedBox(height: 4),
+                  pw.Text('IBAN: ${(datiAzienda['iban'] ?? '').toString()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                ],
               ],
             ),
           ),
@@ -1453,7 +1463,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       _cliente.text = cliente ?? '';
       _iva.text = ((f['iva_percent'] as num?)?.toDouble() ?? 0).toString();
       pagamento = (f['pagamento'] ?? 'Contanti').toString();
-      _iban.text = (f['iban'] ?? '').toString();
       try {
         final raw = jsonDecode((f['articoli'] ?? '[]').toString());
         if (raw is List) {
@@ -1594,12 +1603,6 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       return;
     }
     cliente = _cliente.text.trim();
-    if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inserisci l\'IBAN per il pagamento con bonifico.')),
-      );
-      return;
-    }
 
     setState(() => salvando = true);
     try {
@@ -1613,7 +1616,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           ivaPercent: ivaPercent,
           totale: totale,
           pagamento: pagamento,
-          iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
+          iban: null,
         );
       } else {
         await DatabaseHelper.instance.insertFattura(
@@ -1623,7 +1626,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           ivaPercent: ivaPercent,
           totale: totale,
           pagamento: pagamento,
-          iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
+          iban: null,
         );
       }
       // Il salvataggio nel database è indipendente dalla generazione del PDF:
@@ -1636,9 +1639,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           articoli: articoli,
           ivaPercent: ivaPercent,
           pagamento: pagamento,
-          iban: pagamento == 'Bonifico'
-              ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
-              : null,
+          iban: null,
         );
       } catch (e) {
         errorePdf = e.toString();
@@ -1816,25 +1817,8 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                       DropdownMenuItem(value: 'Contanti', child: Text('Contanti')),
                       DropdownMenuItem(value: 'Bonifico', child: Text('Bonifico')),
                     ],
-                    onChanged: (v) => setState(() {
-                      pagamento = v ?? 'Contanti';
-                      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
-                        _iban.text = 'IT28F0538715206000003630167';
-                      }
-                    }),
+                    onChanged: (v) => setState(() => pagamento = v ?? 'Contanti'),
                   ),
-                  if (pagamento == 'Bonifico') ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _iban,
-                      keyboardType: TextInputType.text,
-                      decoration: const InputDecoration(
-                        labelText: 'IBAN',
-                        hintText: 'Inserisci IBAN',
-                        prefixIcon: Icon(Icons.account_balance),
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -5613,6 +5597,93 @@ class _BackupScreenState extends State<BackupScreen> {
   bool busy = false;
   String? lastMessage;
 
+  final _ragione = TextEditingController();
+  final _indirizzo = TextEditingController();
+  final _telefono = TextEditingController();
+  final _email = TextEditingController();
+  final _piva = TextEditingController();
+  final _cf = TextEditingController();
+  final _iban = TextEditingController();
+  String _logoPath = '';
+  String _iconaPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _caricaImpostazioni();
+  }
+
+  @override
+  void dispose() {
+    _ragione.dispose();
+    _indirizzo.dispose();
+    _telefono.dispose();
+    _email.dispose();
+    _piva.dispose();
+    _cf.dispose();
+    _iban.dispose();
+    super.dispose();
+  }
+
+  Future<void> _caricaImpostazioni() async {
+    final d = await DatabaseHelper.instance.getImpostazioni();
+    if (!mounted) return;
+    setState(() {
+      _ragione.text = (d['ragione_sociale'] ?? '').toString();
+      _indirizzo.text = (d['indirizzo'] ?? '').toString();
+      _telefono.text = (d['telefono'] ?? '').toString();
+      _email.text = (d['email'] ?? '').toString();
+      _piva.text = (d['partita_iva'] ?? '').toString();
+      _cf.text = (d['codice_fiscale'] ?? '').toString();
+      _iban.text = (d['iban'] ?? '').toString();
+      _logoPath = (d['logo_path'] ?? '').toString();
+      _iconaPath = (d['icona_path'] ?? '').toString();
+    });
+  }
+
+  Future<String?> _scegliImmagine(String tipo) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'ico'],
+    );
+    if (result == null || result.files.single.path == null) return null;
+
+    final source = File(result.files.single.path!);
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory(p.join(dir.path, 'personalizzazione'));
+    if (!await folder.exists()) await folder.create(recursive: true);
+
+    final ext = p.extension(source.path).isEmpty ? '.png' : p.extension(source.path);
+    final destination = File(p.join(folder.path, '${tipo}_personalizzato$ext'));
+    await source.copy(destination.path);
+    return destination.path;
+  }
+
+  Future<void> _salvaImpostazioni() async {
+    setState(() => busy = true);
+    try {
+      await DatabaseHelper.instance.salvaImpostazioni({
+        'ragione_sociale': _ragione.text.trim(),
+        'indirizzo': _indirizzo.text.trim(),
+        'telefono': _telefono.text.trim(),
+        'email': _email.text.trim(),
+        'partita_iva': _piva.text.trim(),
+        'codice_fiscale': _cf.text.trim(),
+        'iban': _iban.text.trim(),
+        'logo_path': _logoPath,
+        'icona_path': _iconaPath,
+      });
+      if (mounted) {
+        setState(() => lastMessage =
+            'Dati salvati. Logo, dati azienda e IBAN verranno stampati nei preventivi e nelle fatture.');
+      }
+    } catch (e) {
+      if (mounted) setState(() => lastMessage = 'Errore salvataggio dati: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> _esporta() async {
     setState(() => busy = true);
     try {
@@ -5638,7 +5709,7 @@ class _BackupScreenState extends State<BackupScreen> {
         allowedExtensions: ['json'],
       );
       if (result == null || result.files.single.path == null) {
-        setState(() => busy = false);
+        if (mounted) setState(() => busy = false);
         return;
       }
       if (!mounted) return;
@@ -5657,6 +5728,7 @@ class _BackupScreenState extends State<BackupScreen> {
       );
       if (conferma != true) return;
       await DatabaseHelper.instance.importBackup(File(result.files.single.path!));
+      await _caricaImpostazioni();
       if (mounted) setState(() => lastMessage = 'Backup importato correttamente.');
     } catch (e) {
       if (mounted) setState(() => lastMessage = 'Backup non valido: $e');
@@ -5678,13 +5750,111 @@ class _BackupScreenState extends State<BackupScreen> {
     }
   }
 
+  Widget _campo(TextEditingController c, String label, IconData icon,
+      {TextInputType? keyboardType}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: c,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Backup e dati')),
+      appBar: AppBar(title: const Text('Gestione Dati')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Dati inseriti manualmente',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Questi dati vengono memorizzati nell’app per poterli gestire manualmente. '
+                    'Vengono utilizzati nei preventivi e nelle fatture.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  _campo(_ragione, 'Ragione sociale / nome azienda', Icons.business),
+                  _campo(_indirizzo, 'Indirizzo', Icons.location_on_outlined),
+                  _campo(_telefono, 'Telefono', Icons.phone_outlined, keyboardType: TextInputType.phone),
+                  _campo(_email, 'Email', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
+                  _campo(_piva, 'Partita IVA', Icons.badge_outlined),
+                  _campo(_cf, 'Codice Fiscale', Icons.badge),
+                  _campo(_iban, 'IBAN', Icons.account_balance),
+                  const SizedBox(height: 4),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.image_outlined),
+                    title: const Text('Logo'),
+                    subtitle: Text(
+                      _logoPath.isEmpty
+                          ? 'Nessun logo selezionato'
+                          : _logoPath,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Seleziona logo',
+                      icon: const Icon(Icons.folder_open),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              final path = await _scegliImmagine('logo');
+                              if (path != null && mounted) setState(() => _logoPath = path);
+                            },
+                    ),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.apps_outlined),
+                    title: const Text('Icona programma'),
+                    subtitle: Text(
+                      _iconaPath.isEmpty
+                          ? 'Nessuna icona selezionata'
+                          : _iconaPath,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Seleziona icona',
+                      icon: const Icon(Icons.folder_open),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              final path = await _scegliImmagine('icona');
+                              if (path != null && mounted) setState(() => _iconaPath = path);
+                            },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: busy ? null : _salvaImpostazioni,
+                      icon: const Icon(Icons.save_rounded),
+                      label: const Text('SALVA DATI'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Card(
             child: ListTile(
               leading: const Icon(Icons.cloud_done_outlined),
@@ -5723,7 +5893,8 @@ class _BackupScreenState extends State<BackupScreen> {
           ],
           const SizedBox(height: 18),
           const Text(
-            'Il backup contiene clienti, prodotti/servizi, preventivi e acconti. L’importazione aggiorna i dati esistenti e aggiunge quelli nuovi, senza cancellare i dati già presenti sul dispositivo.',
+            'Il backup contiene clienti, prodotti/servizi, preventivi, fatture, acconti e i dati inseriti nella Gestione Dati. '
+            'L’importazione aggiorna i dati esistenti e aggiunge quelli nuovi, senza cancellare i dati già presenti sul dispositivo.',
             style: TextStyle(fontSize: 13),
           ),
         ],
