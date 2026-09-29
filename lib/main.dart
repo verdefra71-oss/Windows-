@@ -5922,6 +5922,7 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   bool busy = false;
+  bool _appActivated = false;
   String? lastMessage;
 
   final _ragione = TextEditingController();
@@ -5956,6 +5957,7 @@ class _BackupScreenState extends State<BackupScreen> {
 
   Future<void> _caricaImpostazioni() async {
     final d = await DatabaseHelper.instance.getImpostazioni();
+    final activated = await TrialService.isActivated();
     if (!mounted) return;
     setState(() {
       _ragione.text = (d['ragione_sociale'] ?? '').toString();
@@ -5966,6 +5968,7 @@ class _BackupScreenState extends State<BackupScreen> {
       _cf.text = (d['codice_fiscale'] ?? '').toString();
       _iban.text = (d['iban'] ?? '').toString();
       _activationKey.text = '';
+      _appActivated = activated;
       _logoPath = (d['logo_path'] ?? '').toString();
       _iconaPath = (d['icona_path'] ?? '').toString();
     });
@@ -6297,40 +6300,79 @@ foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll(
                     'Attivazione applicazione',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'La versione demo è valida per 30 giorni. Inserisci qui la chiave per attivare definitivamente l’app su questo dispositivo.',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _activationKey,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'Chiave di attivazione',
-                      prefixIcon: Icon(Icons.vpn_key_outlined),
+                  const SizedBox(height: 8),
+                  if (_appActivated)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.green.withOpacity(0.10),
+                        border: Border.all(color: Colors.green.withOpacity(0.35)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.green),
+                          SizedBox(width: 10),
+                          Text(
+                            'Programma attivato',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    const Text(
+                      'La versione demo è valida per 30 giorni. Inserisci qui la chiave per attivare definitivamente l’app su questo dispositivo.',
+                      style: TextStyle(fontSize: 13),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: busy ? null : () async {
-                        final result = await TrialService.activateResult(_activationKey.text);
-                        if (!mounted) return;
-                        setState(() => lastMessage = result == 'ok'
-                            ? 'Applicazione attivata correttamente.'
-                            : result == 'expired'
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _activationKey,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Chiave di attivazione',
+                        prefixIcon: Icon(Icons.vpn_key_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: busy ? null : () async {
+                          final result = await TrialService.activateResult(_activationKey.text);
+                          if (!mounted) return;
+                          if (result == 'ok') {
+                            setState(() {
+                              _appActivated = true;
+                              lastMessage = 'Programma attivato';
+                            });
+                            _activationKey.clear();
+                          } else {
+                            setState(() => lastMessage = result == 'expired'
                                 ? 'Chiave scaduta: questa chiave è già stata utilizzata.'
                                 : 'Chiave di attivazione non valida.');
-                        if (result == 'ok') {
-                          _activationKey.clear();
-                        }
-                      },
-                      icon: const Icon(Icons.lock_open_outlined),
-                      label: const Text('ATTIVA APPLICAZIONE'),
+                          }
+                        },
+                        icon: const Icon(Icons.lock_open_outlined),
+                        label: const Text('ATTIVA APPLICAZIONE'),
+                      ),
                     ),
-                  ),
+                  ],
+                  if (!_appActivated && lastMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      lastMessage!,
+                      style: TextStyle(
+                        color: lastMessage!.contains('attivato') ? Colors.green : Colors.red,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
