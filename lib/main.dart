@@ -2182,49 +2182,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                   ),
                                 if (_logoPath.isNotEmpty) const SizedBox(width: 14),
-                                const Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    'GESTIONE\nPREVENTIVI',
-                                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                                  ),
-                                ),
                               ],
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 18),
-                        Container(
-                          width: 1,
-                          height: compact ? 72 : 92,
-                          color: _gold.withValues(alpha: .45),
-                        ),
-                        const SizedBox(width: 22),
-                        const Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'GESTIONE PREVENTIVI',
-                                style: TextStyle(
-                                  color: _darkGold,
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              SizedBox(height: 7),
-                              Text(
-                                'Tutto il tuo lavoro,\nsemplice e ordinato.',
-                                style: TextStyle(
-                                  color: Color(0xFF514644),
-                                  fontSize: 16,
-                                  height: 1.25,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
                           ),
                         ),
                       ],
@@ -5613,6 +5572,7 @@ class _BackupScreenState extends State<BackupScreen> {
   final _cf = TextEditingController();
   final _iban = TextEditingController();
   String _logoPath = '';
+  String _iconaPath = '';
 
   @override
   void initState() {
@@ -5644,6 +5604,7 @@ class _BackupScreenState extends State<BackupScreen> {
       _cf.text = (d['codice_fiscale'] ?? '').toString();
       _iban.text = (d['iban'] ?? '').toString();
       _logoPath = (d['logo_path'] ?? '').toString();
+      _iconaPath = (d['icona_path'] ?? '').toString();
     });
   }
 
@@ -5677,6 +5638,7 @@ class _BackupScreenState extends State<BackupScreen> {
         'codice_fiscale': _cf.text.trim(),
         'iban': _iban.text.trim(),
         'logo_path': _logoPath,
+        'icona_path': _iconaPath,
       });
       if (mounted) {
         setState(() => lastMessage =
@@ -5823,6 +5785,50 @@ class _BackupScreenState extends State<BackupScreen> {
                               if (path != null && mounted) setState(() => _logoPath = path);
                             },
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.app_settings_alt_outlined),
+                    title: const Text('Immagine icona programma'),
+                    subtitle: Text(
+                      _iconaPath.isEmpty
+                          ? 'Nessuna immagine selezionata'
+                          : _iconaPath,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Seleziona immagine icona',
+                      icon: const Icon(Icons.folder_open),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              final path = await _scegliImmagine('icona');
+                              if (path != null && mounted) setState(() => _iconaPath = path);
+                            },
+                    ),
+                  ),
+                  if (_iconaPath.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.file(
+                          File(_iconaPath),
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  const Text(
+                    'L’immagine scelta viene salvata come icona personalizzata. Per Android e Windows l’icona del programma viene applicata alla successiva compilazione dell’app; la scelta resta memorizzata nell’app.',
+                    style: TextStyle(fontSize: 12.5),
                   ),
                   const SizedBox(height: 10),
                   SizedBox(
