@@ -1296,11 +1296,6 @@ class PdfGenerator {
       if (matches.isNotEmpty) datiCliente = Map<String, dynamic>.from(matches.first);
     } catch (_) {}
 
-    final imponibile = articoli.fold<double>(0, (sum, x) {
-      final prezzo = (x['prezzo'] as num?)?.toDouble() ?? 0;
-      final quantita = (x['quantita'] as num?)?.toDouble() ?? 1;
-      return sum + prezzo * quantita;
-    });
     final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
     final gold = PdfColor.fromHex('#B8860B');
 
@@ -2247,47 +2242,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMenuGrid(double tileHeight) {
     final items = <_DashboardItem>[
-      _DashboardItem(
+      const _DashboardItem(
         Icons.receipt_long_rounded,
         'Nuovo\nPreventivo',
         const NuovoPreventivoScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.people_alt_rounded,
         'Clienti',
         const ClientiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.inventory_2_rounded,
         'Prodotti /\nServizi',
         const ProdottiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.list_alt_rounded,
         'Lista\nPreventivi',
         const ListaPreventiviScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.payments_rounded,
         'Acconti',
         const AccontiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.receipt_rounded,
         'Fatture',
         const ListaFattureScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.request_quote_rounded,
         'Crea\nFattura',
         const CreaFatturaScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.settings_rounded,
         'Gestione\nDati',
         const BackupScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.notifications_active_rounded,
         'Notifiche',
         const NotificheScreen(),
@@ -2301,7 +2296,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             : constraints.maxWidth >= 700
                 ? 3
                 : 2;
-        final gap = 14.0;
+        const gap = 14.0;
         final width =
             (constraints.maxWidth - gap * (columns - 1)) / columns;
 
