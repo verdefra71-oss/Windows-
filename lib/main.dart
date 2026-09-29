@@ -1660,9 +1660,29 @@ class PdfGenerator {
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (logoAzienda != null) pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda, fit: pw.BoxFit.contain)),
+              if (logoAzienda != null)
+                pw.Container(
+                  width: 58,
+                  height: 30,
+                  margin: const pw.EdgeInsets.only(right: 10),
+                  child: pw.Image(logoAzienda, fit: pw.BoxFit.contain),
+                ),
               pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['ragione_sociale'] ?? '').toString(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty)
+                  pw.SizedBox(
+                    height: 22,
+                    width: double.infinity,
+                    child: pw.FittedBox(
+                      fit: pw.BoxFit.scaleDown,
+                      alignment: pw.Alignment.centerLeft,
+                      child: pw.Text(
+                        (datiAzienda['ragione_sociale'] ?? '').toString(),
+                        maxLines: 1,
+                        softWrap: false,
+                        style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                  ),
                 if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
                 if ((datiAzienda['telefono'] ?? '').toString().trim().isNotEmpty) pw.Text('Tel: ${(datiAzienda['telefono'] ?? '').toString()}'),
                 if ((datiAzienda['email'] ?? '').toString().trim().isNotEmpty) pw.Text('Email: ${(datiAzienda['email'] ?? '').toString()}'),
