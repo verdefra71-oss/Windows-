@@ -42,6 +42,341 @@ void main() async {
   runApp(const PreventiviApp());
 }
 
+
+class TrialService {
+  static const int trialDays = 30;
+
+  // Chiave supervisore: attiva tutte le versioni senza scadenza.
+  static const String supervisorKey = 'Boccie 1971@';
+
+  // 100 chiavi commerciali monouso. Ogni chiave, una volta utilizzata,
+  // viene registrata localmente e non può essere riutilizzata sulla stessa installazione.
+  static const Set<String> oneTimeKeys = <String>{
+    'PREV-FEOC-X6HO-IG20',
+    'PREV-OWLN-UHO4-U4Q1',
+    'PREV-AVK0-0EE9-13SL',
+    'PREV-TGRD-S38K-SW01',
+    'PREV-6HHT-DHPR-DLBG',
+    'PREV-Z497-L149-SBS9',
+    'PREV-TRAD-F71M-GTTT',
+    'PREV-H7PM-05KR-6EWO',
+    'PREV-EGQH-TKEX-DGCY',
+    'PREV-BESQ-GBPY-8RDV',
+    'PREV-LUY6-M3TR-93X9',
+    'PREV-71R0-M6ZA-VKEI',
+    'PREV-FN17-VUO6-FHHI',
+    'PREV-9JP3-DG1Z-LMDF',
+    'PREV-SQ17-ABRQ-R43Y',
+    'PREV-UAZP-25JY-FH4H',
+    'PREV-SL4Y-HM37-PNZK',
+    'PREV-VBLO-LJ57-XUVZ',
+    'PREV-WWBW-T8RR-6AIE',
+    'PREV-5CHU-I0SQ-2DA7',
+    'PREV-7SGB-1CZ5-YSY0',
+    'PREV-GNK1-6SFN-FVSP',
+    'PREV-GN9J-67FN-WDXH',
+    'PREV-7QWA-33VC-4GJ1',
+    'PREV-D08Z-BX7T-4CK7',
+    'PREV-FKZF-CDTX-OO53',
+    'PREV-1EDR-UMO9-19JT',
+    'PREV-7YWU-MPKB-H56C',
+    'PREV-MTSY-7AD4-2OA4',
+    'PREV-D78I-AVCB-314P',
+    'PREV-VO92-RO5Y-7RWH',
+    'PREV-BRKK-ZTIW-RVWX',
+    'PREV-1UOT-DDJ6-LUC4',
+    'PREV-RLEP-70PR-7BPF',
+    'PREV-ELRI-D5OW-44UH',
+    'PREV-WFAR-9XMD-55E1',
+    'PREV-3R83-7VJR-IJXT',
+    'PREV-YNB4-Z640-WC4D',
+    'PREV-65UH-KFGP-J226',
+    'PREV-D3ZV-MQPF-V0KD',
+    'PREV-SJ5H-7690-3ZRR',
+    'PREV-Z2NK-P725-H45V',
+    'PREV-YK6D-MM2C-4MJ6',
+    'PREV-G2L6-FXQP-MYLA',
+    'PREV-LNXS-8N42-TYVN',
+    'PREV-89DM-4MFK-8J8F',
+    'PREV-RTDS-DHK2-GTJL',
+    'PREV-RK8D-Q3YT-1QLF',
+    'PREV-7NBM-PLDT-AJY1',
+    'PREV-1HIO-GI7S-SY1S',
+    'PREV-K3IA-HO1F-CXRG',
+    'PREV-YXMF-6EYM-VXFL',
+    'PREV-YIX7-YZXM-2O21',
+    'PREV-U3EL-GLHC-M17K',
+    'PREV-RJZ6-69YS-9GY2',
+    'PREV-A3QR-YF4I-DRTC',
+    'PREV-3WK5-LCQH-VG3I',
+    'PREV-2S29-W58V-EDFR',
+    'PREV-LFQ0-LLOH-X2RV',
+    'PREV-L8KF-KLBY-XN5O',
+    'PREV-93DN-RH2V-AK1S',
+    'PREV-53I6-QH34-HXFL',
+    'PREV-NS5M-7V8B-758J',
+    'PREV-N1SY-6BE5-QU1P',
+    'PREV-EAU7-9LRB-HKGK',
+    'PREV-9FMQ-Y3RH-FS0M',
+    'PREV-J9VB-7NMC-QYAM',
+    'PREV-MXPI-AFV9-WQDA',
+    'PREV-HBL4-6MPO-PB5U',
+    'PREV-6KJ8-501N-E6IM',
+    'PREV-YM4O-KB8D-XDVZ',
+    'PREV-W4V4-LP4A-19TX',
+    'PREV-1S6E-UKIC-0D6E',
+    'PREV-3NY7-VFJA-0WCS',
+    'PREV-GC84-R8I1-BMHM',
+    'PREV-08QW-SNJL-A5A5',
+    'PREV-BRRH-SFXW-BCSB',
+    'PREV-C1NF-G8JT-PXX3',
+    'PREV-PF3B-RQTQ-D002',
+    'PREV-7VN5-XC8L-IOAN',
+    'PREV-IP65-BBF6-QFD5',
+    'PREV-E1HS-2K7K-02E3',
+    'PREV-21TI-PCIG-53JE',
+    'PREV-OOE6-Y009-EGDA',
+    'PREV-UY1B-HLXQ-6ELY',
+    'PREV-1GJ7-KB4U-O4UC',
+    'PREV-41VO-6N2J-C2MB',
+    'PREV-7PAY-BYF6-YQR8',
+    'PREV-PA1F-4NUA-JQGP',
+    'PREV-JJSW-PAVI-M3X3',
+    'PREV-X1YM-3BF1-5NK8',
+    'PREV-PTDE-ASS3-9AT7',
+    'PREV-A55J-Q5ZA-ISRB',
+    'PREV-SVOX-ZXS2-Q2CG',
+    'PREV-W79P-Y2I2-6CU3',
+    'PREV-U0ZZ-JMFO-UU6F',
+    'PREV-UT87-XM5W-BP2U',
+    'PREV-SNA9-SAX8-7IZ8',
+    'PREV-ISSB-XINY-5YHW',
+    'PREV-OHRN-SEUH-TGKU'
+  };
+
+  static const String _startKey = 'demo_started_at';
+  static const String _lastSeenKey = 'demo_last_seen_at';
+  static const String _activatedKey = 'demo_activated';
+  static const String _usedKeysKey = 'used_activation_keys';
+  static const String _activationTypeKey = 'activation_type';
+
+  static Future<void> ensureStarted() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    if (!prefs.containsKey(_startKey)) {
+      await prefs.setInt(_startKey, now);
+      await prefs.setInt(_lastSeenKey, now);
+    }
+    final lastSeen = prefs.getInt(_lastSeenKey) ?? now;
+    if (now < lastSeen) {
+      await prefs.setBool('demo_clock_tampered', true);
+    }
+    if (now > lastSeen) {
+      await prefs.setInt(_lastSeenKey, now);
+    }
+  }
+
+  static Future<bool> isActivated() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_activatedKey) ?? false;
+  }
+
+  static Future<String> activateResult(String key) async {
+    final normalized = key.trim();
+    final prefs = await SharedPreferences.getInstance();
+
+    if (normalized == supervisorKey) {
+      await prefs.setBool(_activatedKey, true);
+      await prefs.setString(_activationTypeKey, 'supervisor');
+      return 'ok';
+    }
+
+    if (!oneTimeKeys.contains(normalized)) {
+      return 'invalid';
+    }
+
+    final used = prefs.getStringList(_usedKeysKey) ?? <String>[];
+    if (used.contains(normalized)) {
+      return 'expired';
+    }
+
+    used.add(normalized);
+    await prefs.setStringList(_usedKeysKey, used);
+    await prefs.setBool(_activatedKey, true);
+    await prefs.setString(_activationTypeKey, 'one_time');
+    return 'ok';
+  }
+
+  static Future<bool> activate(String key) async {
+    return (await activateResult(key)) == 'ok';
+  }
+
+  static Future<int> daysRemaining() async {
+    await ensureStarted();
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_activatedKey) ?? false) return 9999;
+    if (prefs.getBool('demo_clock_tampered') ?? false) return 0;
+    final start = prefs.getInt(_startKey);
+    if (start == null) return trialDays;
+    final elapsed = DateTime.now().toUtc().millisecondsSinceEpoch - start;
+    final remainingMs = const Duration(days: trialDays).inMilliseconds - elapsed;
+    if (remainingMs <= 0) return 0;
+    return (remainingMs / Duration.millisecondsPerDay).ceil();
+  }
+}
+
+class TrialGate extends StatefulWidget {
+  const TrialGate({super.key});
+
+  @override
+  State<TrialGate> createState() => _TrialGateState();
+}
+
+class _TrialGateState extends State<TrialGate> {
+  bool loading = true;
+  bool activated = false;
+  int days = 30;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    await TrialService.ensureStarted();
+    final a = await TrialService.isActivated();
+    final d = await TrialService.daysRemaining();
+    if (!mounted) return;
+    setState(() {
+      activated = a;
+      days = d;
+      loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (activated || days > 0) {
+      return DashboardScreen(trialDaysRemaining: days);
+    }
+    return _DemoExpiredScreen(onActivated: _check);
+  }
+}
+
+class _DemoExpiredScreen extends StatefulWidget {
+  const _DemoExpiredScreen({required this.onActivated});
+  final Future<void> Function() onActivated;
+
+  @override
+  State<_DemoExpiredScreen> createState() => _DemoExpiredScreenState();
+}
+
+class _DemoExpiredScreenState extends State<_DemoExpiredScreen> {
+  final _key = TextEditingController();
+  String? error;
+  bool busy = false;
+
+  @override
+  void dispose() {
+    _key.dispose();
+    super.dispose();
+  }
+
+  Future<void> _activate() async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    final result = await TrialService.activateResult(_key.text);
+    if (!mounted) return;
+    if (result != 'ok') {
+      setState(() {
+        busy = false;
+        error = result == 'expired'
+            ? 'Chiave scaduta: questa chiave è già stata utilizzata.'
+            : 'Chiave di attivazione non valida.';
+      });
+      return;
+    }
+    await widget.onActivated();
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const BackupScreen()),
+    );
+    await widget.onActivated();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFFBFC),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Card(
+            margin: const EdgeInsets.all(24),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_clock_outlined, size: 58, color: Color(0xFF9A7000)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Versione demo scaduta',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'I 30 giorni di prova sono terminati. Inserisci la chiave di attivazione per continuare a utilizzare Gestione Preventivi.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _key,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'Chiave di attivazione',
+                      prefixIcon: Icon(Icons.vpn_key_outlined),
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(error!, style: const TextStyle(color: Colors.red)),
+                  ],
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: busy ? null : _activate,
+                      icon: const Icon(Icons.lock_open_outlined),
+                      label: const Text('ATTIVA APP'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: busy ? null : _openSettings,
+                    icon: const Icon(Icons.settings_outlined),
+                    label: const Text('Inserisci la chiave in Gestione Dati'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class PreventiviApp extends StatelessWidget {
   const PreventiviApp({super.key});
 
@@ -96,7 +431,7 @@ class PreventiviApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const DashboardScreen(),
+      home: const TrialGate(),
     );
   }
 }
@@ -1655,6 +1990,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
     _iva.dispose();
     _cliente.dispose();
     _iban.dispose();
+    _activationKey.dispose();
     super.dispose();
   }
 
@@ -2051,7 +2387,9 @@ class _ListaFattureScreenState extends State<ListaFattureScreen> {
 }
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.trialDaysRemaining});
+
+  final int? trialDaysRemaining;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -2143,6 +2481,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: EdgeInsets.fromLTRB(horizontal, 14, horizontal, 22),
               child: Column(
                 children: [
+                  if (widget.trialDaysRemaining != null && widget.trialDaysRemaining! < TrialService.trialDays) ...[
+                    Card(
+                      color: const Color(0xFFFFF6D8),
+                      child: ListTile(
+                        leading: const Icon(Icons.timer_outlined),
+                        title: const Text('Versione demo'),
+                        subtitle: Text('Giorni di prova rimanenti: ${widget.trialDaysRemaining}'),
+                        trailing: const Icon(Icons.info_outline),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.fromLTRB(
@@ -5582,6 +5932,7 @@ class _BackupScreenState extends State<BackupScreen> {
   final _piva = TextEditingController();
   final _cf = TextEditingController();
   final _iban = TextEditingController();
+  final _activationKey = TextEditingController();
   String _logoPath = '';
   String _iconaPath = '';
 
@@ -5600,6 +5951,7 @@ class _BackupScreenState extends State<BackupScreen> {
     _piva.dispose();
     _cf.dispose();
     _iban.dispose();
+    _activationKey.dispose();
     super.dispose();
   }
 
@@ -5614,6 +5966,7 @@ class _BackupScreenState extends State<BackupScreen> {
       _piva.text = (d['partita_iva'] ?? '').toString();
       _cf.text = (d['codice_fiscale'] ?? '').toString();
       _iban.text = (d['iban'] ?? '').toString();
+      _activationKey.text = '';
       _logoPath = (d['logo_path'] ?? '').toString();
       _iconaPath = (d['icona_path'] ?? '').toString();
     });
@@ -5928,6 +6281,55 @@ foreach (\$lnk in @('${desktop.replaceAll("'", "''")}', '${startMenu.replaceAll(
                       onPressed: busy ? null : _salvaImpostazioni,
                       icon: const Icon(Icons.save_rounded),
                       label: const Text('SALVA DATI'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Attivazione applicazione',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'La versione demo è valida per 30 giorni. Inserisci qui la chiave per attivare definitivamente l’app su questo dispositivo.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _activationKey,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'Chiave di attivazione',
+                      prefixIcon: Icon(Icons.vpn_key_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: busy ? null : () async {
+                        final result = await TrialService.activateResult(_activationKey.text);
+                        if (!mounted) return;
+                        setState(() => lastMessage = result == 'ok'
+                            ? 'Applicazione attivata correttamente.'
+                            : result == 'expired'
+                                ? 'Chiave scaduta: questa chiave è già stata utilizzata.'
+                                : 'Chiave di attivazione non valida.');
+                        if (result == 'ok') {
+                          _activationKey.clear();
+                        }
+                      },
+                      icon: const Icon(Icons.lock_open_outlined),
+                      label: const Text('ATTIVA APPLICAZIONE'),
                     ),
                   ),
                 ],
