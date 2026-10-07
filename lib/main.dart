@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2365,47 +2364,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMenuGrid(double tileHeight) {
     final items = <_DashboardItem>[
-      _DashboardItem(
+      const _DashboardItem(
         Icons.receipt_long_rounded,
         'Nuovo\nPreventivo',
         const NuovoPreventivoScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.people_alt_rounded,
         'Clienti',
         const ClientiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.inventory_2_rounded,
         'Prodotti /\nServizi',
         const ProdottiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.list_alt_rounded,
         'Lista\nPreventivi',
         const ListaPreventiviScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.payments_rounded,
         'Acconti',
         const AccontiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.receipt_rounded,
         'Fatture',
         const ListaFattureScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.request_quote_rounded,
         'Crea\nFattura',
         const CreaFatturaScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.settings_rounded,
         'Gestione\nDati',
         const BackupScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.notifications_active_rounded,
         'Notifiche',
         const NotificheScreen(),
@@ -2419,7 +2418,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             : constraints.maxWidth >= 700
                 ? 3
                 : 2;
-        final gap = 14.0;
+        const gap = 14.0;
         final width =
             (constraints.maxWidth - gap * (columns - 1)) / columns;
 
@@ -4844,6 +4843,7 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
       final clienteId = widget.cliente['id'] as int;
       final scheda = await DatabaseHelper.instance.getSchedaParrocchia(clienteId);
       if (scheda == null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Salva prima la scheda parrocchia.')),
         );
@@ -4906,6 +4906,8 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
         );
       }
 
+      final logoImage = logo;
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
@@ -4914,8 +4916,8 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                if (logo != null)
-                  pw.SizedBox(width: 150, height: 90, child: pw.Image(logo!, fit: pw.BoxFit.contain))
+                if (logoImage != null)
+                  pw.SizedBox(width: 150, height: 90, child: pw.Image(logoImage, fit: pw.BoxFit.contain))
                 else
                   pw.SizedBox(width: 150, child: pw.Text('GESTIONE IMPIANTI', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: gold))),
                 pw.Expanded(
