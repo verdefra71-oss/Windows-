@@ -47,3 +47,7 @@ In GitHub: **Actions → Build Preventivi Windows → Run workflow**.
 Al termine scarica l'artifact **Gestione-Preventivi-Windows**.
 
 La versione Windows utilizza SQLite tramite FFI, quindi mantiene il database locale dell'app senza richiedere un server.
+
+
+### Scheda Parrocchia – PDF
+La scheda tecnica della parrocchia, collegata al cliente, dispone del pulsante **SCARICA PDF**. Il PDF comprende dati della parrocchia e del cliente, impianto audio, campane e note/ultimi interventi. Su Windows viene salvato automaticamente nella cartella Download e aperto al termine della generazione.
