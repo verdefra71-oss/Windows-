@@ -355,16 +355,16 @@ CREATE TABLE schede_parrocchie (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cliente_id INTEGER NOT NULL UNIQUE,
   audio_diffusori_numero INTEGER NOT NULL DEFAULT 0,
-  audio_diffusori_marca TEXT NOT NULL DEFAULT '',
-  audio_amplificatore TEXT NOT NULL DEFAULT '',
-  audio_amplificatore_marca TEXT NOT NULL DEFAULT '',
+  audio_diffusori_marca TEXT,
+  audio_amplificatore_marca TEXT,
   audio_microfoni_numero INTEGER NOT NULL DEFAULT 0,
-  audio_qualita TEXT NOT NULL DEFAULT '',
-  audio_note TEXT NOT NULL DEFAULT '',
+  audio_microfoni_marca TEXT,
+  audio_qualita TEXT,
+  audio_note TEXT,
   campane_numero INTEGER NOT NULL DEFAULT 0,
-  campane_programmatore TEXT NOT NULL DEFAULT '',
-  campane_specifiche_impianto TEXT NOT NULL DEFAULT '',
-  campane_note TEXT NOT NULL DEFAULT ''
+  campane_programmatore TEXT,
+  campane_specifiche_impianto TEXT,
+  campane_note TEXT
 )
 ''');
       },
@@ -437,20 +437,20 @@ CREATE TABLE fatture (
         }
         if (oldVersion < 14) {
           await db.execute('''
-CREATE TABLE IF NOT EXISTS schede_parrocchie (
+CREATE TABLE schede_parrocchie (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cliente_id INTEGER NOT NULL UNIQUE,
   audio_diffusori_numero INTEGER NOT NULL DEFAULT 0,
-  audio_diffusori_marca TEXT NOT NULL DEFAULT '',
-  audio_amplificatore TEXT NOT NULL DEFAULT '',
-  audio_amplificatore_marca TEXT NOT NULL DEFAULT '',
+  audio_diffusori_marca TEXT,
+  audio_amplificatore_marca TEXT,
   audio_microfoni_numero INTEGER NOT NULL DEFAULT 0,
-  audio_qualita TEXT NOT NULL DEFAULT '',
-  audio_note TEXT NOT NULL DEFAULT '',
+  audio_microfoni_marca TEXT,
+  audio_qualita TEXT,
+  audio_note TEXT,
   campane_numero INTEGER NOT NULL DEFAULT 0,
-  campane_programmatore TEXT NOT NULL DEFAULT '',
-  campane_specifiche_impianto TEXT NOT NULL DEFAULT '',
-  campane_note TEXT NOT NULL DEFAULT ''
+  campane_programmatore TEXT,
+  campane_specifiche_impianto TEXT,
+  campane_note TEXT
 )
 ''');
         }
@@ -625,62 +625,16 @@ CREATE TABLE IF NOT EXISTS schede_parrocchie (
     return result;
   }
 
-  Future<Map<String, dynamic>?> getSchedaParrocchia(int clienteId) async {
-    final rows = await (await database).query(
-      'schede_parrocchie',
-      where: 'cliente_id = ?',
-      whereArgs: [clienteId],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
-  }
-
-  Future<void> saveSchedaParrocchia({
-    required int clienteId,
-    required int audioDiffusoriNumero,
-    required String audioDiffusoriMarca,
-    required String audioAmplificatore,
-    required String audioAmplificatoreMarca,
-    required int audioMicrofoniNumero,
-    required String audioQualita,
-    required String audioNote,
-    required int campaneNumero,
-    required String campaneProgrammatore,
-    required String campaneSpecificheImpianto,
-    required String campaneNote,
-  }) async {
-    final db = await database;
-    await db.insert(
-      'schede_parrocchie',
-      {
-        'cliente_id': clienteId,
-        'audio_diffusori_numero': audioDiffusoriNumero,
-        'audio_diffusori_marca': audioDiffusoriMarca,
-        'audio_amplificatore': audioAmplificatore,
-        'audio_amplificatore_marca': audioAmplificatoreMarca,
-        'audio_microfoni_numero': audioMicrofoniNumero,
-        'audio_qualita': audioQualita,
-        'audio_note': audioNote,
-        'campane_numero': campaneNumero,
-        'campane_programmatore': campaneProgrammatore,
-        'campane_specifiche_impianto': campaneSpecificheImpianto,
-        'campane_note': campaneNote,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    await autoBackup();
-  }
-
   Future<int> deleteCliente(int id) async {
     final db = await database;
-    await db.delete(
-      'schede_parrocchie',
-      where: 'cliente_id = ?',
-      whereArgs: [id],
-    );
     final result = await db.delete(
       'clienti',
       where: 'id = ?',
+      whereArgs: [id],
+    );
+    await db.delete(
+      'schede_parrocchie',
+      where: 'cliente_id = ?',
       whereArgs: [id],
     );
     await autoBackup();
@@ -865,8 +819,8 @@ CREATE TABLE IF NOT EXISTS schede_parrocchie (
       'prodotti': await db.query('prodotti'),
       'preventivi': await db.query('preventivi'),
       'fatture': await db.query('fatture'),
-      'acconti': await getAcconti(),
       'schede_parrocchie': await db.query('schede_parrocchie'),
+      'acconti': await getAcconti(),
     };
   }
 
@@ -981,6 +935,59 @@ CREATE TABLE IF NOT EXISTS schede_parrocchie (
       await mergeRows('schede_parrocchie', schedeParrocchie);
     });
     await createAutomaticBackup();
+  }
+
+  Future<Map<String, dynamic>?> getSchedaParrocchia(int clienteId) async {
+    final rows = await (await database).query(
+      'schede_parrocchie',
+      where: 'cliente_id = ?',
+      whereArgs: [clienteId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> saveSchedaParrocchia({
+    required int clienteId,
+    required int audioDiffusoriNumero,
+    required String audioDiffusoriMarca,
+    required String audioAmplificatoreMarca,
+    required int audioMicrofoniNumero,
+    required String audioMicrofoniMarca,
+    required String audioQualita,
+    required String audioNote,
+    required int campaneNumero,
+    required String campaneProgrammatore,
+    required String campaneSpecificheImpianto,
+    required String campaneNote,
+  }) async {
+    final db = await database;
+    final values = {
+      'cliente_id': clienteId,
+      'audio_diffusori_numero': audioDiffusoriNumero,
+      'audio_diffusori_marca': audioDiffusoriMarca,
+      'audio_amplificatore_marca': audioAmplificatoreMarca,
+      'audio_microfoni_numero': audioMicrofoniNumero,
+      'audio_microfoni_marca': audioMicrofoniMarca,
+      'audio_qualita': audioQualita,
+      'audio_note': audioNote,
+      'campane_numero': campaneNumero,
+      'campane_programmatore': campaneProgrammatore,
+      'campane_specifiche_impianto': campaneSpecificheImpianto,
+      'campane_note': campaneNote,
+    };
+    final existing = await getSchedaParrocchia(clienteId);
+    if (existing == null) {
+      await db.insert('schede_parrocchie', values);
+    } else {
+      await db.update(
+        'schede_parrocchie',
+        values,
+        where: 'cliente_id = ?',
+        whereArgs: [clienteId],
+      );
+    }
+    await autoBackup();
   }
 
   Future<void> autoBackup() async {
@@ -4730,10 +4737,14 @@ Future<void> aggiungiAcconto() async {
   }
 }
 
+
 class SchedaParrocchiaScreen extends StatefulWidget {
   final Map<String, dynamic> cliente;
 
-  const SchedaParrocchiaScreen({super.key, required this.cliente});
+  const SchedaParrocchiaScreen({
+    super.key,
+    required this.cliente,
+  });
 
   @override
   State<SchedaParrocchiaScreen> createState() => _SchedaParrocchiaScreenState();
@@ -4741,106 +4752,119 @@ class SchedaParrocchiaScreen extends StatefulWidget {
 
 class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _diffusoriNumero = TextEditingController();
-  final _diffusoriMarca = TextEditingController();
-  final _amplificatore = TextEditingController();
-  final _amplificatoreMarca = TextEditingController();
-  final _microfoniNumero = TextEditingController();
-  final _qualita = TextEditingController();
-  final _audioNote = TextEditingController();
-  final _campaneNumero = TextEditingController();
-  final _programmatore = TextEditingController();
-  final _specificheImpianto = TextEditingController();
-  final _campaneNote = TextEditingController();
+
+  late final TextEditingController _diffusoriNumero;
+  late final TextEditingController _diffusoriMarca;
+  late final TextEditingController _amplificatoreMarca;
+  late final TextEditingController _microfoniNumero;
+  late final TextEditingController _microfoniMarca;
+  late final TextEditingController _qualita;
+  late final TextEditingController _audioNote;
+
+  late final TextEditingController _campaneNumero;
+  late final TextEditingController _programmatore;
+  late final TextEditingController _specificheImpianto;
+  late final TextEditingController _campaneNote;
+
   bool _loading = true;
-  bool _salvataggio = false;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
+    _diffusoriNumero = TextEditingController(text: '0');
+    _diffusoriMarca = TextEditingController();
+    _amplificatoreMarca = TextEditingController();
+    _microfoniNumero = TextEditingController(text: '0');
+    _microfoniMarca = TextEditingController();
+    _qualita = TextEditingController();
+    _audioNote = TextEditingController();
+    _campaneNumero = TextEditingController(text: '0');
+    _programmatore = TextEditingController();
+    _specificheImpianto = TextEditingController();
+    _campaneNote = TextEditingController();
     _carica();
   }
 
   Future<void> _carica() async {
-    final scheda = await DatabaseHelper.instance
-        .getSchedaParrocchia(widget.cliente['id'] as int);
-    if (scheda != null) {
-      _diffusoriNumero.text = '${scheda['audio_diffusori_numero'] ?? 0}';
-      _diffusoriMarca.text = '${scheda['audio_diffusori_marca'] ?? ''}';
-      _amplificatore.text = '${scheda['audio_amplificatore'] ?? ''}';
-      _amplificatoreMarca.text = '${scheda['audio_amplificatore_marca'] ?? ''}';
-      _microfoniNumero.text = '${scheda['audio_microfoni_numero'] ?? 0}';
-      _qualita.text = '${scheda['audio_qualita'] ?? ''}';
-      _audioNote.text = '${scheda['audio_note'] ?? ''}';
-      _campaneNumero.text = '${scheda['campane_numero'] ?? 0}';
-      _programmatore.text = '${scheda['campane_programmatore'] ?? ''}';
-      _specificheImpianto.text = '${scheda['campane_specifiche_impianto'] ?? ''}';
-      _campaneNote.text = '${scheda['campane_note'] ?? ''}';
-    } else {
-      _diffusoriNumero.text = '0';
-      _microfoniNumero.text = '0';
-      _campaneNumero.text = '0';
+    final id = widget.cliente['id'] as int;
+    final s = await DatabaseHelper.instance.getSchedaParrocchia(id);
+    if (s != null) {
+      _diffusoriNumero.text = '${s['audio_diffusori_numero'] ?? 0}';
+      _diffusoriMarca.text = '${s['audio_diffusori_marca'] ?? ''}';
+      _amplificatoreMarca.text = '${s['audio_amplificatore_marca'] ?? ''}';
+      _microfoniNumero.text = '${s['audio_microfoni_numero'] ?? 0}';
+      _microfoniMarca.text = '${s['audio_microfoni_marca'] ?? ''}';
+      _qualita.text = '${s['audio_qualita'] ?? ''}';
+      _audioNote.text = '${s['audio_note'] ?? ''}';
+      _campaneNumero.text = '${s['campane_numero'] ?? 0}';
+      _programmatore.text = '${s['campane_programmatore'] ?? ''}';
+      _specificheImpianto.text = '${s['campane_specifiche_impianto'] ?? ''}';
+      _campaneNote.text = '${s['campane_note'] ?? ''}';
     }
     if (mounted) setState(() => _loading = false);
-  }
-
-  @override
-  void dispose() {
-    for (final c in [
-      _diffusoriNumero, _diffusoriMarca, _amplificatore,
-      _amplificatoreMarca, _microfoniNumero, _qualita, _audioNote,
-      _campaneNumero, _programmatore, _specificheImpianto, _campaneNote,
-    ]) {
-      c.dispose();
-    }
-    super.dispose();
   }
 
   int _numero(TextEditingController c) => int.tryParse(c.text.trim()) ?? 0;
 
   Future<void> _salva() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _salvataggio = true);
-    await DatabaseHelper.instance.saveSchedaParrocchia(
-      clienteId: widget.cliente['id'] as int,
-      audioDiffusoriNumero: _numero(_diffusoriNumero),
-      audioDiffusoriMarca: _diffusoriMarca.text.trim(),
-      audioAmplificatore: _amplificatore.text.trim(),
-      audioAmplificatoreMarca: _amplificatoreMarca.text.trim(),
-      audioMicrofoniNumero: _numero(_microfoniNumero),
-      audioQualita: _qualita.text.trim(),
-      audioNote: _audioNote.text.trim(),
-      campaneNumero: _numero(_campaneNumero),
-      campaneProgrammatore: _programmatore.text.trim(),
-      campaneSpecificheImpianto: _specificheImpianto.text.trim(),
-      campaneNote: _campaneNote.text.trim(),
-    );
-    if (!mounted) return;
-    setState(() => _salvataggio = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Scheda parrocchia salvata.')),
-    );
+    setState(() => _saving = true);
+    try {
+      await DatabaseHelper.instance.saveSchedaParrocchia(
+        clienteId: widget.cliente['id'] as int,
+        audioDiffusoriNumero: _numero(_diffusoriNumero),
+        audioDiffusoriMarca: _diffusoriMarca.text.trim(),
+        audioAmplificatoreMarca: _amplificatoreMarca.text.trim(),
+        audioMicrofoniNumero: _numero(_microfoniNumero),
+        audioMicrofoniMarca: _microfoniMarca.text.trim(),
+        audioQualita: _qualita.text.trim(),
+        audioNote: _audioNote.text.trim(),
+        campaneNumero: _numero(_campaneNumero),
+        campaneProgrammatore: _programmatore.text.trim(),
+        campaneSpecificheImpianto: _specificheImpianto.text.trim(),
+        campaneNote: _campaneNote.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Scheda parrocchia salvata.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
-  Widget _numeroField(String label, TextEditingController controller, IconData icon) {
+  Widget _numeroField(TextEditingController c, String label, IconData icon) {
     return TextFormField(
-      controller: controller,
+      controller: c,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+      ),
     );
   }
 
-  Widget _campo(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
+  Widget _testo(TextEditingController c, String label, IconData icon,
+      {int maxLines = 1}) {
     return TextFormField(
-      controller: controller,
+      controller: c,
       maxLines: maxLines,
       textCapitalization: TextCapitalization.sentences,
-      decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon), alignLabelWithHint: maxLines > 1),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        alignLabelWithHint: maxLines > 1,
+      ),
     );
   }
 
-  Widget _sezione({required String titolo, required IconData icon, required List<Widget> children}) {
+  Widget _sezione({
+    required String titolo,
+    required IconData icona,
+    required List<Widget> children,
+  }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
@@ -4848,13 +4872,19 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Icon(icon, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 10),
-              Text(titolo, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            ]),
+            Row(
+              children: [
+                Icon(icona, color: Theme.of(context).colorScheme.primary, size: 28),
+                const SizedBox(width: 10),
+                Text(
+                  titolo,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
-            ...children,
+            ...children.expand((w) => [w, const SizedBox(height: 12)]).toList()
+              ..removeLast(),
           ],
         ),
       ),
@@ -4865,71 +4895,115 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
   Widget build(BuildContext context) {
     final nome = (widget.cliente['nome'] ?? '').toString();
     final parrocchia = (widget.cliente['parrocchia'] ?? '').toString().trim();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Scheda parrocchia')),
+      appBar: AppBar(
+        title: const Text('Scheda Parrocchia'),
+        actions: [
+          IconButton(
+            tooltip: 'Salva scheda',
+            onPressed: _saving ? null : _salva,
+            icon: const Icon(Icons.save_outlined),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 30),
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
                 children: [
                   Card(
                     child: ListTile(
                       leading: const CircleAvatar(child: Icon(Icons.church_outlined)),
-                      title: Text(parrocchia.isEmpty ? nome : parrocchia, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(
+                        parrocchia.isEmpty ? 'Parrocchia non indicata' : parrocchia,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       subtitle: Text('Cliente: $nome'),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   _sezione(
                     titolo: 'Impianto Audio',
-                    icon: Icons.volume_up_outlined,
+                    icona: Icons.volume_up_outlined,
                     children: [
-                      Row(children: [
-                        Expanded(child: _numeroField('Numero diffusori', _diffusoriNumero, Icons.speaker_group_outlined)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _campo('Marca diffusori', _diffusoriMarca, Icons.branding_watermark_outlined)),
-                      ]),
-                      const SizedBox(height: 12),
-                      Row(children: [
-                        Expanded(child: _campo('Amplificatore / modello', _amplificatore, Icons.settings_input_component_outlined)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _campo('Marca amplificatore', _amplificatoreMarca, Icons.branding_watermark_outlined)),
-                      ]),
-                      const SizedBox(height: 12),
-                      _numeroField('Numero microfoni', _microfoniNumero, Icons.mic_none_outlined),
-                      const SizedBox(height: 12),
-                      _campo('Qualità dell’impianto', _qualita, Icons.star_outline),
-                      const SizedBox(height: 12),
-                      _campo('Note / ultimi interventi effettuati', _audioNote, Icons.notes_outlined, maxLines: 5),
+                      Row(
+                        children: [
+                          Expanded(child: _numeroField(_diffusoriNumero, 'Numero diffusori', Icons.speaker_group_outlined)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _testo(_diffusoriMarca, 'Marca diffusori', Icons.speaker_outlined)),
+                        ],
+                      ),
+                      _testo(_amplificatoreMarca, 'Marca / modello amplificatore', Icons.graphic_eq_outlined),
+                      Row(
+                        children: [
+                          Expanded(child: _numeroField(_microfoniNumero, 'Numero microfoni', Icons.mic_none_outlined)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _testo(_microfoniMarca, 'Marca microfoni', Icons.mic_outlined)),
+                        ],
+                      ),
+                      _testo(_qualita, 'Qualità dell’impianto', Icons.star_outline),
+                      _testo(
+                        _audioNote,
+                        'Note / ultimi interventi audio',
+                        Icons.notes_outlined,
+                        maxLines: 5,
+                      ),
                     ],
                   ),
                   _sezione(
-                    titolo: 'Impianto Campane',
-                    icon: Icons.notifications_active_outlined,
+                    titolo: 'Campane',
+                    icona: Icons.notifications_none_outlined,
                     children: [
-                      _numeroField('Numero campane', _campaneNumero, Icons.notifications_none_outlined),
-                      const SizedBox(height: 12),
-                      _campo('Programmatore esistente', _programmatore, Icons.schedule_outlined, maxLines: 2),
-                      const SizedBox(height: 12),
-                      _campo('Specifiche dell’impianto', _specificheImpianto, Icons.build_outlined, maxLines: 4),
-                      const SizedBox(height: 12),
-                      _campo('Note / ultimi interventi effettuati', _campaneNote, Icons.notes_outlined, maxLines: 5),
+                      _numeroField(_campaneNumero, 'Numero campane', Icons.numbers_outlined),
+                      _testo(_programmatore, 'Programmatore esistente', Icons.settings_remote_outlined),
+                      _testo(
+                        _specificheImpianto,
+                        'Specifiche dell’impianto campane',
+                        Icons.settings_outlined,
+                        maxLines: 4,
+                      ),
+                      _testo(
+                        _campaneNote,
+                        'Note / ultimi interventi campane',
+                        Icons.notes_outlined,
+                        maxLines: 5,
+                      ),
                     ],
                   ),
-                  SizedBox(
-                    height: 52,
-                    child: FilledButton.icon(
-                      onPressed: _salvataggio ? null : _salva,
-                      icon: _salvataggio ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
-                      label: Text(_salvataggio ? 'SALVATAGGIO...' : 'SALVA SCHEDA'),
-                    ),
+                  FilledButton.icon(
+                    onPressed: _saving ? null : _salva,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.save),
+                    label: Text(_saving ? 'SALVATAGGIO...' : 'SALVA SCHEDA'),
                   ),
                 ],
               ),
             ),
     );
+  }
+
+  @override
+  void dispose() {
+    _diffusoriNumero.dispose();
+    _diffusoriMarca.dispose();
+    _amplificatoreMarca.dispose();
+    _microfoniNumero.dispose();
+    _microfoniMarca.dispose();
+    _qualita.dispose();
+    _audioNote.dispose();
+    _campaneNumero.dispose();
+    _programmatore.dispose();
+    _specificheImpianto.dispose();
+    _campaneNote.dispose();
+    super.dispose();
   }
 }
 
@@ -5148,6 +5222,15 @@ class _ClientiScreenState extends State<ClientiScreen> {
     parrocchia.dispose();
   }
 
+  Future<void> _apriSchedaParrocchia(Map<String, dynamic> c) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SchedaParrocchiaScreen(cliente: c),
+      ),
+    );
+  }
+
   Future<void> _apriMaps(String indirizzo) async {
     final query = indirizzo.trim();
     if (query.isEmpty) return;
@@ -5173,15 +5256,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
         );
       }
     }
-  }
-
-  Future<void> _apriSchedaParrocchia(Map<String, dynamic> c) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SchedaParrocchiaScreen(cliente: c),
-      ),
-    );
   }
 
   Future<void> _gestisciAppuntamento(Map<String, dynamic> c) async {
@@ -5407,26 +5481,13 @@ class _ClientiScreenState extends State<ClientiScreen> {
                             ),
                           ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.outlineVariant,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ListTile(
-                                leading: Icon(
-                                  Icons.church_outlined,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                title: const Text(
-                                  'Scheda parrocchia',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                subtitle: const Text('Impianto audio e campane'),
-                                trailing: const Icon(Icons.arrow_forward_ios, size: 18),
-                                onTap: () => _apriSchedaParrocchia(c),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () => _apriSchedaParrocchia(c),
+                                icon: const Icon(Icons.church_outlined),
+                                label: const Text('SCHEDA PARROCCHIA • AUDIO E CAMPANE'),
                               ),
                             ),
                           ),
