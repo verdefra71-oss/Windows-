@@ -85,28 +85,32 @@ jobs:
           groovy = Path('android/app/build.gradle')
           kts = Path('android/app/build.gradle.kts')
 
-          if kts.exists():
-              p = kts
-              s = p.read_text(encoding='utf-8')
-              # Kotlin DSL uses: compileSdk = 36
-              if re.search(r'(?m)^\s*compileSdk\s*(?:=\s*)?\d+', s):
-                  s = re.sub(r'(?m)^(\s*compileSdk\s*)(?:=\s*)?\d+', r'\1= 36', s, count=1)
-              else:
-                  raise SystemExit('Impossibile impostare compileSdk 36 nel build.gradle.kts')
-              if not re.search(r'(?m)^\s*compileSdk\s*=\s*36\s*$', s):
-                  raise SystemExit('Impossibile impostare compileSdk 36 nel build.gradle.kts')
-              p.write_text(s, encoding='utf-8')
-          elif groovy.exists():
-              p = groovy
-              s = p.read_text(encoding='utf-8')
-              s, n = re.subn(r'compileSdk\s*=\s*[^\n]+', 'compileSdk 36', s, count=1)
-              if n == 0:
-                  s, n = re.subn(r'compileSdk\s+[^\n]+', 'compileSdk 36', s, count=1)
-              if n == 0:
-                  raise SystemExit('Impossibile impostare compileSdk 36 nel build.gradle')
-              p.write_text(s, encoding='utf-8')
-          else:
+          p = kts if kts.exists() else groovy if groovy.exists() else None
+          if p is None:
               raise SystemExit('Nessun build.gradle o build.gradle.kts trovato')
+
+          s = p.read_text(encoding='utf-8')
+          if p.suffix == '.kts':
+              # Flutter's current template normally contains either
+              # `compileSdk = flutter.compileSdkVersion` or a numeric value.
+              if re.search(r'(?m)^\s*compileSdk\s*=.*$', s):
+                  s = re.sub(r'(?m)^\s*compileSdk\s*=.*$', '    compileSdk = 36', s, count=1)
+              elif re.search(r'(?m)^\s*compileSdk\b.*$', s):
+                  s = re.sub(r'(?m)^\s*compileSdk\b.*$', '    compileSdk = 36', s, count=1)
+              elif re.search(r'(?m)^android\s*\{', s):
+                  s = re.sub(r'(?m)^(android\s*\{)', r'\1\n    compileSdk = 36', s, count=1)
+              else:
+                  raise SystemExit('Blocco android non trovato in build.gradle.kts')
+          else:
+              if re.search(r'(?m)^\s*compileSdk(?:Version)?\s+.*$', s):
+                  s = re.sub(r'(?m)^\s*compileSdk(?:Version)?\s+.*$', '    compileSdk 36', s, count=1)
+              elif re.search(r'(?m)^android\s*\{', s):
+                  s = re.sub(r'(?m)^(android\s*\{)', r'\1\n    compileSdk 36', s, count=1)
+              else:
+                  raise SystemExit('Blocco android non trovato in build.gradle')
+
+          p.write_text(s, encoding='utf-8')
+          print(f'compileSdk 36 configurato in {p}')
           PY
 
       - name: Enable core library desugaring
