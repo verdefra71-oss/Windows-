@@ -48,6 +48,7 @@ jobs:
         run: |
           set -e
           flutter create --platforms=android --project-name preventivi_app .
+          test -f android/app/build.gradle.kts -o -f android/app/build.gradle
 
       - name: Configure Android manifest
         working-directory: ${{ env.APP_DIR }}
@@ -56,15 +57,17 @@ jobs:
           set -e
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text(encoding='utf-8')
           permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
           if 'android.permission.POST_NOTIFICATIONS' not in s:
-              marker = '>'
-              end = s.find(marker)
-              if end < 0:
-                  raise SystemExit('Manifest Android non valido')
-              s = s[:end + 1] + '\n' + permission + s[end + 1:]
+              # Inserisce il permesso subito dopo il tag <manifest>, non dopo
+              # la dichiarazione XML iniziale.
+              pattern = r'(<manifest\b[^>]*>)'
+              s, count = re.subn(pattern, r'\1\n' + permission, s, count=1)
+              if count != 1:
+                  raise SystemExit('Tag <manifest> non trovato: Manifest Android non valido')
               p.write_text(s, encoding='utf-8')
           print('Manifest configurato:', p)
           PY
@@ -193,6 +196,7 @@ jobs:
         run: |
           flutter config --enable-windows-desktop
           flutter create --platforms=windows --project-name preventivi_app .
+          if (-not (Test-Path 'windows/CMakeLists.txt')) { throw 'CMakeLists.txt Windows non generato' }
 
           $icon = Join-Path $env:APP_DIR 'assets\app_icon.ico'
           $targetDir = Join-Path $env:APP_DIR 'windows\runner\resources'
