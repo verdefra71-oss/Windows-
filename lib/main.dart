@@ -4878,7 +4878,7 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
                     child: ListTile(
                       leading: const CircleAvatar(child: Icon(Icons.church_outlined)),
                       title: Text(parrocchia.isEmpty ? nome : parrocchia, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: parrocchia.isEmpty ? 'Cliente: $nome' : 'Cliente: $nome',
+                      subtitle: Text('Cliente: $nome'),
                     ),
                   ),
                   const SizedBox(height: 8),
