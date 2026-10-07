@@ -88,9 +88,12 @@ jobs:
           if kts.exists():
               p = kts
               s = p.read_text(encoding='utf-8')
-              s = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 36', s, count=1)
-              s = re.sub(r'compileSdk\s+[^\n]+', 'compileSdk 36', s, count=1)
-              if 'compileSdk = 36' not in s and 'compileSdk 36' not in s:
+              # Kotlin DSL uses: compileSdk = 36
+              if re.search(r'(?m)^\s*compileSdk\s*(?:=\s*)?\d+', s):
+                  s = re.sub(r'(?m)^(\s*compileSdk\s*)(?:=\s*)?\d+', r'\1= 36', s, count=1)
+              else:
+                  raise SystemExit('Impossibile impostare compileSdk 36 nel build.gradle.kts')
+              if not re.search(r'(?m)^\s*compileSdk\s*=\s*36\s*$', s):
                   raise SystemExit('Impossibile impostare compileSdk 36 nel build.gradle.kts')
               p.write_text(s, encoding='utf-8')
           elif groovy.exists():
