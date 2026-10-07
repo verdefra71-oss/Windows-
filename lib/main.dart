@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -4834,6 +4835,190 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
     }
   }
 
+  Future<void> _esportaPdf() async {
+    if (_loading || _saving) return;
+    setState(() => _saving = true);
+    try {
+      // Recupera la scheda dal database per assicurarsi che il PDF contenga
+      // esattamente gli ultimi dati salvati.
+      final clienteId = widget.cliente['id'] as int;
+      final scheda = await DatabaseHelper.instance.getSchedaParrocchia(clienteId);
+      if (scheda == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Salva prima la scheda parrocchia.')),
+        );
+        return;
+      }
+
+      final fontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
+      final boldFontData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
+      final pdf = pw.Document(
+        theme: pw.ThemeData.withFont(
+          base: pw.Font.ttf(fontData),
+          bold: pw.Font.ttf(boldFontData),
+        ),
+      );
+
+      pw.MemoryImage? logo;
+      try {
+        final bytes = await rootBundle.load('assets/logo.png');
+        logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
+      } catch (_) {}
+
+      final gold = PdfColor.fromHex('#B8860B');
+      final lightGold = PdfColor.fromHex('#E8D9A5');
+      final cliente = (widget.cliente['nome'] ?? '').toString().trim();
+      final parrocchia = (widget.cliente['parrocchia'] ?? '').toString().trim();
+      final indirizzo = (widget.cliente['indirizzo'] ?? '').toString().trim();
+      final telefono = (widget.cliente['telefono'] ?? '').toString().trim();
+      final email = (widget.cliente['email'] ?? '').toString().trim();
+      final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
+
+      String v(String key) => (scheda[key] ?? '').toString().trim();
+      String n(String key) => (scheda[key] ?? 0).toString();
+
+      pw.Widget titolo(String text) => pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: pw.BoxDecoration(
+          color: lightGold,
+          border: pw.Border.all(color: gold),
+        ),
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: gold),
+        ),
+      );
+
+      pw.Widget riga(String label, String value) {
+        return pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 4),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: 185,
+                child: pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              ),
+              pw.Expanded(child: pw.Text(value.isEmpty ? '—' : value)),
+            ],
+          ),
+        );
+      }
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.fromLTRB(32, 30, 32, 30),
+          build: (_) => [
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                if (logo != null)
+                  pw.SizedBox(width: 150, height: 90, child: pw.Image(logo!, fit: pw.BoxFit.contain))
+                else
+                  pw.SizedBox(width: 150, child: pw.Text('GESTIONE IMPIANTI', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: gold))),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('SCHEDA TECNICA PARROCCHIA', style: pw.TextStyle(fontSize: 17, fontWeight: pw.FontWeight.bold, color: gold)),
+                      pw.SizedBox(height: 5),
+                      pw.Text('Data: $data'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('DATI PARROCCHIA', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: gold)),
+                  pw.SizedBox(height: 6),
+                  riga('Parrocchia', parrocchia),
+                  riga('Cliente', cliente),
+                  if (indirizzo.isNotEmpty) riga('Indirizzo', indirizzo),
+                  if (telefono.isNotEmpty) riga('Telefono', telefono),
+                  if (email.isNotEmpty) riga('Email', email),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+            titolo('IMPIANTO AUDIO'),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
+              child: pw.Column(
+                children: [
+                  riga('Numero diffusori', n('audio_diffusori_numero')),
+                  riga('Marca diffusori', v('audio_diffusori_marca')),
+                  riga('Amplificatore', v('audio_amplificatore_marca')),
+                  riga('Numero microfoni', n('audio_microfoni_numero')),
+                  riga('Marca microfoni', v('audio_microfoni_marca')),
+                  riga('Qualità dell’impianto', v('audio_qualita')),
+                  riga('Note / ultimi interventi', v('audio_note')),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+            titolo('CAMPANE'),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
+              child: pw.Column(
+                children: [
+                  riga('Numero campane', n('campane_numero')),
+                  riga('Programmatore esistente', v('campane_programmatore')),
+                  riga('Specifiche impianto', v('campane_specifiche_impianto')),
+                  riga('Note / ultimi interventi', v('campane_note')),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 18),
+            pw.Divider(color: lightGold),
+            pw.Text('Scheda tecnica generata dall’app Gestione Preventivi.', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+          ],
+        ),
+      );
+
+      final pdfBytes = await pdf.save();
+      final safeName = (parrocchia.isEmpty ? cliente : parrocchia)
+          .replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_')
+          .replaceAll(RegExp(r'_+'), '_');
+      final filename = 'Scheda_Parrocchia_${safeName.isEmpty ? 'Senza_Nome' : safeName}.pdf';
+
+      if (Platform.isWindows) {
+        Directory? downloads;
+        try {
+          downloads = await getDownloadsDirectory();
+        } catch (_) {}
+        final directory = downloads ?? await getApplicationDocumentsDirectory();
+        final file = File(p.join(directory.path, filename));
+        await file.writeAsBytes(pdfBytes, flush: true);
+        await Process.run('explorer.exe', [file.path], runInShell: false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF salvato in: ${file.path}')),
+        );
+      } else {
+        final condiviso = await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+        if (!condiviso) throw Exception('Impossibile aprire la condivisione del PDF.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore nella creazione del PDF: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   Widget _numeroField(TextEditingController c, String label, IconData icon) {
     return TextFormField(
       controller: c,
@@ -4900,6 +5085,11 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
       appBar: AppBar(
         title: const Text('Scheda Parrocchia'),
         actions: [
+          IconButton(
+            tooltip: 'Scarica scheda PDF',
+            onPressed: _saving ? null : _esportaPdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+          ),
           IconButton(
             tooltip: 'Salva scheda',
             onPressed: _saving ? null : _salva,
@@ -4973,16 +5163,30 @@ class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
                       ),
                     ],
                   ),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _salva,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.save),
-                    label: Text(_saving ? 'SALVATAGGIO...' : 'SALVA SCHEDA'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _saving ? null : _salva,
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.save),
+                          label: Text(_saving ? 'SALVATAGGIO...' : 'SALVA SCHEDA'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _saving ? null : _esportaPdf,
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          label: const Text('SCARICA PDF'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
