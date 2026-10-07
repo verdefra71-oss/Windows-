@@ -41,377 +41,6 @@ void main() async {
   runApp(const PreventiviApp());
 }
 
-
-class TrialService {
-  static const int trialDays = 30;
-
-  // Chiave supervisore: attiva tutte le versioni senza scadenza.
-  static const String supervisorKey = 'Boccie 1971@';
-
-  // 100 chiavi commerciali monouso. Ogni chiave, una volta utilizzata,
-  // viene registrata localmente e non può essere riutilizzata sulla stessa installazione.
-  static const Set<String> oneTimeKeys = <String>{
-    'PREV-FEOC-X6HO-IG20',
-    'PREV-OWLN-UHO4-U4Q1',
-    'PREV-AVK0-0EE9-13SL',
-    'PREV-TGRD-S38K-SW01',
-    'PREV-6HHT-DHPR-DLBG',
-    'PREV-Z497-L149-SBS9',
-    'PREV-TRAD-F71M-GTTT',
-    'PREV-H7PM-05KR-6EWO',
-    'PREV-EGQH-TKEX-DGCY',
-    'PREV-BESQ-GBPY-8RDV',
-    'PREV-LUY6-M3TR-93X9',
-    'PREV-71R0-M6ZA-VKEI',
-    'PREV-FN17-VUO6-FHHI',
-    'PREV-9JP3-DG1Z-LMDF',
-    'PREV-SQ17-ABRQ-R43Y',
-    'PREV-UAZP-25JY-FH4H',
-    'PREV-SL4Y-HM37-PNZK',
-    'PREV-VBLO-LJ57-XUVZ',
-    'PREV-WWBW-T8RR-6AIE',
-    'PREV-5CHU-I0SQ-2DA7',
-    'PREV-7SGB-1CZ5-YSY0',
-    'PREV-GNK1-6SFN-FVSP',
-    'PREV-GN9J-67FN-WDXH',
-    'PREV-7QWA-33VC-4GJ1',
-    'PREV-D08Z-BX7T-4CK7',
-    'PREV-FKZF-CDTX-OO53',
-    'PREV-1EDR-UMO9-19JT',
-    'PREV-7YWU-MPKB-H56C',
-    'PREV-MTSY-7AD4-2OA4',
-    'PREV-D78I-AVCB-314P',
-    'PREV-VO92-RO5Y-7RWH',
-    'PREV-BRKK-ZTIW-RVWX',
-    'PREV-1UOT-DDJ6-LUC4',
-    'PREV-RLEP-70PR-7BPF',
-    'PREV-ELRI-D5OW-44UH',
-    'PREV-WFAR-9XMD-55E1',
-    'PREV-3R83-7VJR-IJXT',
-    'PREV-YNB4-Z640-WC4D',
-    'PREV-65UH-KFGP-J226',
-    'PREV-D3ZV-MQPF-V0KD',
-    'PREV-SJ5H-7690-3ZRR',
-    'PREV-Z2NK-P725-H45V',
-    'PREV-YK6D-MM2C-4MJ6',
-    'PREV-G2L6-FXQP-MYLA',
-    'PREV-LNXS-8N42-TYVN',
-    'PREV-89DM-4MFK-8J8F',
-    'PREV-RTDS-DHK2-GTJL',
-    'PREV-RK8D-Q3YT-1QLF',
-    'PREV-7NBM-PLDT-AJY1',
-    'PREV-1HIO-GI7S-SY1S',
-    'PREV-K3IA-HO1F-CXRG',
-    'PREV-YXMF-6EYM-VXFL',
-    'PREV-YIX7-YZXM-2O21',
-    'PREV-U3EL-GLHC-M17K',
-    'PREV-RJZ6-69YS-9GY2',
-    'PREV-A3QR-YF4I-DRTC',
-    'PREV-3WK5-LCQH-VG3I',
-    'PREV-2S29-W58V-EDFR',
-    'PREV-LFQ0-LLOH-X2RV',
-    'PREV-L8KF-KLBY-XN5O',
-    'PREV-93DN-RH2V-AK1S',
-    'PREV-53I6-QH34-HXFL',
-    'PREV-NS5M-7V8B-758J',
-    'PREV-N1SY-6BE5-QU1P',
-    'PREV-EAU7-9LRB-HKGK',
-    'PREV-9FMQ-Y3RH-FS0M',
-    'PREV-J9VB-7NMC-QYAM',
-    'PREV-MXPI-AFV9-WQDA',
-    'PREV-HBL4-6MPO-PB5U',
-    'PREV-6KJ8-501N-E6IM',
-    'PREV-YM4O-KB8D-XDVZ',
-    'PREV-W4V4-LP4A-19TX',
-    'PREV-1S6E-UKIC-0D6E',
-    'PREV-3NY7-VFJA-0WCS',
-    'PREV-GC84-R8I1-BMHM',
-    'PREV-08QW-SNJL-A5A5',
-    'PREV-BRRH-SFXW-BCSB',
-    'PREV-C1NF-G8JT-PXX3',
-    'PREV-PF3B-RQTQ-D002',
-    'PREV-7VN5-XC8L-IOAN',
-    'PREV-IP65-BBF6-QFD5',
-    'PREV-E1HS-2K7K-02E3',
-    'PREV-21TI-PCIG-53JE',
-    'PREV-OOE6-Y009-EGDA',
-    'PREV-UY1B-HLXQ-6ELY',
-    'PREV-1GJ7-KB4U-O4UC',
-    'PREV-41VO-6N2J-C2MB',
-    'PREV-7PAY-BYF6-YQR8',
-    'PREV-PA1F-4NUA-JQGP',
-    'PREV-JJSW-PAVI-M3X3',
-    'PREV-X1YM-3BF1-5NK8',
-    'PREV-PTDE-ASS3-9AT7',
-    'PREV-A55J-Q5ZA-ISRB',
-    'PREV-SVOX-ZXS2-Q2CG',
-    'PREV-W79P-Y2I2-6CU3',
-    'PREV-U0ZZ-JMFO-UU6F',
-    'PREV-UT87-XM5W-BP2U',
-    'PREV-SNA9-SAX8-7IZ8',
-    'PREV-ISSB-XINY-5YHW',
-    'PREV-OHRN-SEUH-TGKU'
-  };
-
-  static const String _startKey = 'demo_started_at';
-  static const String _lastSeenKey = 'demo_last_seen_at';
-  static const String _activatedKey = 'demo_activated';
-  static const String _usedKeysKey = 'used_activation_keys';
-  static const String _activationTypeKey = 'activation_type';
-  static const String _activationKeyStorage = 'activation_key';
-
-  static Future<void> ensureStarted() async {
-    final prefs = await SharedPreferences.getInstance();
-    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-    if (!prefs.containsKey(_startKey)) {
-      await prefs.setInt(_startKey, now);
-      await prefs.setInt(_lastSeenKey, now);
-    }
-    final lastSeen = prefs.getInt(_lastSeenKey) ?? now;
-    if (now < lastSeen) {
-      await prefs.setBool('demo_clock_tampered', true);
-    }
-    if (now > lastSeen) {
-      await prefs.setInt(_lastSeenKey, now);
-    }
-  }
-
-  static Future<bool> isActivated() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_activatedKey) ?? false;
-  }
-
-  static Future<String> activateResult(String key) async {
-    final normalized = key.trim();
-    final prefs = await SharedPreferences.getInstance();
-
-    if (normalized == supervisorKey) {
-      await prefs.setBool(_activatedKey, true);
-      await prefs.setString(_activationTypeKey, 'supervisor');
-      await prefs.setString(_activationKeyStorage, normalized);
-      return 'ok';
-    }
-
-    if (!oneTimeKeys.contains(normalized)) {
-      return 'invalid';
-    }
-
-    final used = prefs.getStringList(_usedKeysKey) ?? <String>[];
-    if (used.contains(normalized)) {
-      return 'expired';
-    }
-
-    used.add(normalized);
-    await prefs.setStringList(_usedKeysKey, used);
-    await prefs.setBool(_activatedKey, true);
-    await prefs.setString(_activationTypeKey, 'one_time');
-    await prefs.setString(_activationKeyStorage, normalized);
-    return 'ok';
-  }
-
-  static Future<bool> activate(String key) async {
-    return (await activateResult(key)) == 'ok';
-  }
-
-  static Future<Map<String, dynamic>> backupLicenseData() async {
-    final prefs = await SharedPreferences.getInstance();
-    return {
-      'activated': prefs.getBool(_activatedKey) ?? false,
-      'activationType': prefs.getString(_activationTypeKey) ?? '',
-      'activationKey': prefs.getString(_activationKeyStorage) ?? '',
-      'usedKeys': prefs.getStringList(_usedKeysKey) ?? <String>[],
-      'demoStartedAt': prefs.getInt(_startKey),
-    };
-  }
-
-  static Future<void> restoreLicenseData(Map<String, dynamic> data) async {
-    final prefs = await SharedPreferences.getInstance();
-    final currentlyActivated = prefs.getBool(_activatedKey) ?? false;
-    if (currentlyActivated) return;
-    if (data['activated'] != true) return;
-
-    final key = (data['activationKey'] ?? '').toString().trim();
-    if (key.isEmpty) return;
-    // Accettiamo dal backup solo una chiave realmente riconosciuta
-    // dall'app, evitando che un JSON modificato possa attivarla.
-    if (key != supervisorKey && !oneTimeKeys.contains(key)) return;
-    final type = (data['activationType'] ?? '').toString();
-    await prefs.setBool(_activatedKey, true);
-    await prefs.setString(_activationTypeKey, type.isEmpty ? 'one_time' : type);
-    await prefs.setString(_activationKeyStorage, key);
-    final used = List<String>.from(
-      (data['usedKeys'] as List? ?? const []).map((e) => e.toString()),
-    );
-    if (type == 'one_time' && !used.contains(key)) used.add(key);
-    if (used.isNotEmpty) await prefs.setStringList(_usedKeysKey, used);
-  }
-
-  static Future<int> daysRemaining() async {
-    await ensureStarted();
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_activatedKey) ?? false) return 9999;
-    if (prefs.getBool('demo_clock_tampered') ?? false) return 0;
-    final start = prefs.getInt(_startKey);
-    if (start == null) return trialDays;
-    final elapsed = DateTime.now().toUtc().millisecondsSinceEpoch - start;
-    final remainingMs = const Duration(days: trialDays).inMilliseconds - elapsed;
-    if (remainingMs <= 0) return 0;
-    return (remainingMs / Duration.millisecondsPerDay).ceil();
-  }
-}
-
-class TrialGate extends StatefulWidget {
-  const TrialGate({super.key});
-
-  @override
-  State<TrialGate> createState() => _TrialGateState();
-}
-
-class _TrialGateState extends State<TrialGate> {
-  bool loading = true;
-  bool activated = false;
-  int days = 30;
-
-  @override
-  void initState() {
-    super.initState();
-    _check();
-  }
-
-  Future<void> _check() async {
-    await TrialService.ensureStarted();
-    final a = await TrialService.isActivated();
-    final d = await TrialService.daysRemaining();
-    if (!mounted) return;
-    setState(() {
-      activated = a;
-      days = d;
-      loading = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (activated || days > 0) {
-      return DashboardScreen(trialDaysRemaining: days);
-    }
-    return _DemoExpiredScreen(onActivated: _check);
-  }
-}
-
-class _DemoExpiredScreen extends StatefulWidget {
-  const _DemoExpiredScreen({required this.onActivated});
-  final Future<void> Function() onActivated;
-
-  @override
-  State<_DemoExpiredScreen> createState() => _DemoExpiredScreenState();
-}
-
-class _DemoExpiredScreenState extends State<_DemoExpiredScreen> {
-  final _key = TextEditingController();
-  String? error;
-  bool busy = false;
-
-  @override
-  void dispose() {
-    _key.dispose();
-    super.dispose();
-  }
-
-  Future<void> _activate() async {
-    setState(() {
-      busy = true;
-      error = null;
-    });
-    final result = await TrialService.activateResult(_key.text);
-    if (!mounted) return;
-    if (result != 'ok') {
-      setState(() {
-        busy = false;
-        error = result == 'expired'
-            ? 'Chiave scaduta: questa chiave è già stata utilizzata.'
-            : 'Chiave di attivazione non valida.';
-      });
-      return;
-    }
-    await widget.onActivated();
-  }
-
-  Future<void> _openSettings() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const BackupScreen()),
-    );
-    await widget.onActivated();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFFBFC),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Card(
-            margin: const EdgeInsets.all(24),
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.lock_clock_outlined, size: 58, color: Color(0xFF9A7000)),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Versione demo scaduta',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'I 30 giorni di prova sono terminati. Inserisci la chiave di attivazione per continuare a utilizzare Gestione Preventivi.',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _key,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'Chiave di attivazione',
-                      prefixIcon: Icon(Icons.vpn_key_outlined),
-                    ),
-                  ),
-                  if (error != null) ...[
-                    const SizedBox(height: 8),
-                    Text(error!, style: const TextStyle(color: Colors.red)),
-                  ],
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: busy ? null : _activate,
-                      icon: const Icon(Icons.lock_open_outlined),
-                      label: const Text('ATTIVA APP'),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    onPressed: busy ? null : _openSettings,
-                    icon: const Icon(Icons.settings_outlined),
-                    label: const Text('Inserisci la chiave in Gestione Dati'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class PreventiviApp extends StatelessWidget {
   const PreventiviApp({super.key});
 
@@ -466,7 +95,7 @@ class PreventiviApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const TrialGate(),
+      home: const DashboardScreen(),
     );
   }
 }
@@ -711,21 +340,6 @@ CREATE TABLE fatture (
 ''');
 
         await db.execute('''
-CREATE TABLE impostazioni (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  ragione_sociale TEXT NOT NULL DEFAULT '',
-  indirizzo TEXT NOT NULL DEFAULT '',
-  telefono TEXT NOT NULL DEFAULT '',
-  email TEXT NOT NULL DEFAULT '',
-  partita_iva TEXT NOT NULL DEFAULT '',
-  codice_fiscale TEXT NOT NULL DEFAULT '',
-  iban TEXT NOT NULL DEFAULT '',
-  logo_path TEXT NOT NULL DEFAULT '',
-  icona_path TEXT NOT NULL DEFAULT ''
-)
-''');
-
-        await db.execute('''
 CREATE TABLE acconti (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   preventivo_id INTEGER NOT NULL,
@@ -733,6 +347,24 @@ CREATE TABLE acconti (
   importo REAL NOT NULL,
   data_scadenza TEXT NOT NULL,
   pagata INTEGER NOT NULL DEFAULT 0
+)
+''');
+
+        await db.execute('''
+CREATE TABLE schede_parrocchie (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_id INTEGER NOT NULL UNIQUE,
+  audio_diffusori_numero INTEGER NOT NULL DEFAULT 0,
+  audio_diffusori_marca TEXT NOT NULL DEFAULT '',
+  audio_amplificatore TEXT NOT NULL DEFAULT '',
+  audio_amplificatore_marca TEXT NOT NULL DEFAULT '',
+  audio_microfoni_numero INTEGER NOT NULL DEFAULT 0,
+  audio_qualita TEXT NOT NULL DEFAULT '',
+  audio_note TEXT NOT NULL DEFAULT '',
+  campane_numero INTEGER NOT NULL DEFAULT 0,
+  campane_programmatore TEXT NOT NULL DEFAULT '',
+  campane_specifiche_impianto TEXT NOT NULL DEFAULT '',
+  campane_note TEXT NOT NULL DEFAULT ''
 )
 ''');
       },
@@ -805,17 +437,20 @@ CREATE TABLE fatture (
         }
         if (oldVersion < 14) {
           await db.execute('''
-CREATE TABLE impostazioni (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  ragione_sociale TEXT NOT NULL DEFAULT '',
-  indirizzo TEXT NOT NULL DEFAULT '',
-  telefono TEXT NOT NULL DEFAULT '',
-  email TEXT NOT NULL DEFAULT '',
-  partita_iva TEXT NOT NULL DEFAULT '',
-  codice_fiscale TEXT NOT NULL DEFAULT '',
-  iban TEXT NOT NULL DEFAULT '',
-  logo_path TEXT NOT NULL DEFAULT '',
-  icona_path TEXT NOT NULL DEFAULT ''
+CREATE TABLE IF NOT EXISTS schede_parrocchie (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_id INTEGER NOT NULL UNIQUE,
+  audio_diffusori_numero INTEGER NOT NULL DEFAULT 0,
+  audio_diffusori_marca TEXT NOT NULL DEFAULT '',
+  audio_amplificatore TEXT NOT NULL DEFAULT '',
+  audio_amplificatore_marca TEXT NOT NULL DEFAULT '',
+  audio_microfoni_numero INTEGER NOT NULL DEFAULT 0,
+  audio_qualita TEXT NOT NULL DEFAULT '',
+  audio_note TEXT NOT NULL DEFAULT '',
+  campane_numero INTEGER NOT NULL DEFAULT 0,
+  campane_programmatore TEXT NOT NULL DEFAULT '',
+  campane_specifiche_impianto TEXT NOT NULL DEFAULT '',
+  campane_note TEXT NOT NULL DEFAULT ''
 )
 ''');
         }
@@ -990,8 +625,60 @@ CREATE TABLE impostazioni (
     return result;
   }
 
+  Future<Map<String, dynamic>?> getSchedaParrocchia(int clienteId) async {
+    final rows = await (await database).query(
+      'schede_parrocchie',
+      where: 'cliente_id = ?',
+      whereArgs: [clienteId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
+  }
+
+  Future<void> saveSchedaParrocchia({
+    required int clienteId,
+    required int audioDiffusoriNumero,
+    required String audioDiffusoriMarca,
+    required String audioAmplificatore,
+    required String audioAmplificatoreMarca,
+    required int audioMicrofoniNumero,
+    required String audioQualita,
+    required String audioNote,
+    required int campaneNumero,
+    required String campaneProgrammatore,
+    required String campaneSpecificheImpianto,
+    required String campaneNote,
+  }) async {
+    final db = await database;
+    await db.insert(
+      'schede_parrocchie',
+      {
+        'cliente_id': clienteId,
+        'audio_diffusori_numero': audioDiffusoriNumero,
+        'audio_diffusori_marca': audioDiffusoriMarca,
+        'audio_amplificatore': audioAmplificatore,
+        'audio_amplificatore_marca': audioAmplificatoreMarca,
+        'audio_microfoni_numero': audioMicrofoniNumero,
+        'audio_qualita': audioQualita,
+        'audio_note': audioNote,
+        'campane_numero': campaneNumero,
+        'campane_programmatore': campaneProgrammatore,
+        'campane_specifiche_impianto': campaneSpecificheImpianto,
+        'campane_note': campaneNote,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await autoBackup();
+  }
+
   Future<int> deleteCliente(int id) async {
-    final result = await (await database).delete(
+    final db = await database;
+    await db.delete(
+      'schede_parrocchie',
+      where: 'cliente_id = ?',
+      whereArgs: [id],
+    );
+    final result = await db.delete(
       'clienti',
       where: 'id = ?',
       whereArgs: [id],
@@ -1168,60 +855,6 @@ CREATE TABLE impostazioni (
   }
 
 
-  static const String _aziendaImportataLockKey = 'azienda_importata_lock';
-
-  Future<bool> isAziendaImportataBloccata() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_aziendaImportataLockKey) ?? false;
-  }
-
-  Future<void> bloccaDatiAziendaImportati() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_aziendaImportataLockKey, true);
-  }
-
-  Future<Map<String, dynamic>> getImpostazioni() async {
-    final db = await database;
-    final rows = await db.query('impostazioni', where: 'id = 1', limit: 1);
-    if (rows.isNotEmpty) return Map<String, dynamic>.from(rows.first);
-    return {
-      'id': 1,
-      'ragione_sociale': '',
-      'indirizzo': '',
-      'telefono': '',
-      'email': '',
-      'partita_iva': '',
-      'codice_fiscale': '',
-      'iban': '',
-      'logo_path': '',
-      'icona_path': '',
-    };
-  }
-
-  Future<void> salvaLogo(String logoPath) async {
-    final db = await database;
-    await db.update(
-      'impostazioni',
-      {'logo_path': logoPath},
-      where: 'id = ?',
-      whereArgs: [1],
-    );
-    await autoBackup();
-  }
-
-  Future<void> salvaImpostazioni(Map<String, dynamic> values) async {
-    if (await isAziendaImportataBloccata()) {
-      throw StateError('I dati azienda sono protetti perché importati da un backup.');
-    }
-    final db = await database;
-    await db.insert(
-      'impostazioni',
-      {'id': 1, ...values},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    await autoBackup();
-  }
-
   Future<Map<String, dynamic>> _backupData() async {
     final db = await database;
     return {
@@ -1233,9 +866,7 @@ CREATE TABLE impostazioni (
       'preventivi': await db.query('preventivi'),
       'fatture': await db.query('fatture'),
       'acconti': await getAcconti(),
-      'impostazioni': await getImpostazioni(),
-      'licenza': await TrialService.backupLicenseData(),
-      'aziendaImportataBloccata': await isAziendaImportataBloccata(),
+      'schede_parrocchie': await db.query('schede_parrocchie'),
     };
   }
 
@@ -1276,6 +907,9 @@ CREATE TABLE impostazioni (
     final fatture = List<Map<String, dynamic>>.from(
       (decoded['fatture'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
     );
+    final schedeParrocchie = List<Map<String, dynamic>>.from(
+      (decoded['schede_parrocchie'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
+    );
     final db = await database;
 
     // L'importazione è un MERGE, non una sostituzione del database.
@@ -1283,7 +917,6 @@ CREATE TABLE impostazioni (
     // se l'id non esiste, la riga viene aggiunta con un nuovo id.
     // In questo modo i dati presenti sul dispositivo che non sono nel
     // backup non vengono mai cancellati.
-    bool aziendaImportataOra = false;
     await db.transaction((txn) async {
       Future<void> mergeRows(
         String table,
@@ -1345,31 +978,8 @@ CREATE TABLE impostazioni (
       await mergeRows('prodotti', prodotti);
       await mergeRows('preventivi', preventivi);
       await mergeRows('fatture', fatture);
-      final settings = decoded['impostazioni'];
-      final aziendaGiaBloccata = await isAziendaImportataBloccata();
-      if (settings is Map && !aziendaGiaBloccata) {
-        final values = Map<String, dynamic>.from(settings);
-        values['id'] = 1;
-        await txn.insert(
-          'impostazioni',
-          values,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-        aziendaImportataOra = true;
-      }
+      await mergeRows('schede_parrocchie', schedeParrocchie);
     });
-
-    // Un backup può trasferire anche la licenza. Se l'app corrente è già
-    // attivata, la sua licenza non viene mai sostituita.
-    final licenza = decoded['licenza'];
-    if (licenza is Map) {
-      await TrialService.restoreLicenseData(Map<String, dynamic>.from(licenza));
-    }
-
-    // I dati azienda importati diventano non modificabili nell'app.
-    if (aziendaImportataOra) {
-      await bloccaDatiAziendaImportati();
-    }
     await createAutomaticBackup();
   }
 
@@ -1401,16 +1011,13 @@ class PdfGenerator {
         bold: pw.Font.ttf(boldFontData),
       ),
     );
-    final datiAzienda = await DatabaseHelper.instance.getImpostazioni();
-    pw.MemoryImage? logoAzienda;
-    final logoPath = (datiAzienda['logo_path'] ?? '').toString().trim();
-    if (logoPath.isNotEmpty) {
-      try {
-        final file = File(logoPath);
-        if (await file.exists()) logoAzienda = pw.MemoryImage(await file.readAsBytes());
-      } catch (_) {}
-    }
+    pw.MemoryImage? logo;
     Map<String, dynamic>? datiCliente;
+
+    try {
+      final bytes = await rootBundle.load('assets/logo.png');
+      logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
+    } catch (_) {}
 
     // Recupera l'anagrafica completa per stampare tutti i dati del cliente.
     try {
@@ -1486,33 +1093,48 @@ class PdfGenerator {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(30, 28, 30, 28),
         build: (_) => [
+          // Logo ingrandito: circa il doppio rispetto alla versione precedente.
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (logoAzienda != null)
-                pw.Container(width: 90, height: 70, margin: const pw.EdgeInsets.only(right: 12), child: pw.Image(logoAzienda, fit: pw.BoxFit.contain)),
+              if (logo != null)
+                pw.SizedBox(
+                  width: 285,
+                  height: 190,
+                  child: pw.Image(logo, fit: pw.BoxFit.contain),
+                )
+              else
+                pw.SizedBox(
+                  width: 285,
+                  height: 150,
+                  child: pw.Text(
+                    'BTS',
+                    style: pw.TextStyle(
+                      fontSize: 38,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ),
+              pw.SizedBox(width: 18),
               pw.Expanded(
                 child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty)
-                      pw.Text((datiAzienda['ragione_sociale'] ?? '').toString(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                    if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
-                    if ((datiAzienda['telefono'] ?? '').toString().trim().isNotEmpty) pw.Text('Tel: ${(datiAzienda['telefono'] ?? '').toString()}'),
-                    if ((datiAzienda['email'] ?? '').toString().trim().isNotEmpty) pw.Text('Email: ${(datiAzienda['email'] ?? '').toString()}'),
-                    if ((datiAzienda['partita_iva'] ?? '').toString().trim().isNotEmpty) pw.Text('P. IVA: ${(datiAzienda['partita_iva'] ?? '').toString()}'),
-                    if ((datiAzienda['codice_fiscale'] ?? '').toString().trim().isNotEmpty) pw.Text('C.F.: ${(datiAzienda['codice_fiscale'] ?? '').toString()}'),
+                    pw.Text(
+                      accettato ? 'RICEVUTA' : 'PREVENTIVO',
+                      style: pw.TextStyle(
+                        fontSize: 22,
+                        fontWeight: pw.FontWeight.bold,
+                        color: dark,
+                      ),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Divider(color: gold),
+                    pw.SizedBox(height: 8),
+                    pw.Text('N. $numero', style: const pw.TextStyle(fontSize: 11)),
+                    pw.Text('Data: $data', style: const pw.TextStyle(fontSize: 11)),
                   ],
                 ),
-              ),
-              pw.SizedBox(width: 12),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(accettato ? 'RICEVUTA' : 'PREVENTIVO', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: dark)),
-                  pw.Text('N. $numero', style: const pw.TextStyle(fontSize: 11)),
-                  pw.Text('Data: $data', style: const pw.TextStyle(fontSize: 11)),
-                ],
               ),
             ],
           ),
@@ -1685,16 +1307,12 @@ class PdfGenerator {
         bold: pw.Font.ttf(boldFontData),
       ),
     );
-    final datiAzienda = await DatabaseHelper.instance.getImpostazioni();
-    pw.MemoryImage? logoAzienda;
-    final logoPath = (datiAzienda['logo_path'] ?? '').toString().trim();
-    if (logoPath.isNotEmpty) {
-      try {
-        final file = File(logoPath);
-        if (await file.exists()) logoAzienda = pw.MemoryImage(await file.readAsBytes());
-      } catch (_) {}
-    }
+    pw.MemoryImage? logo;
     Map<String, dynamic>? datiCliente;
+    try {
+      final bytes = await rootBundle.load('assets/logo.png');
+      logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
+    } catch (_) {}
     try {
       final clienti = await DatabaseHelper.instance.getClienti();
       final matches = clienti.where(
@@ -1703,6 +1321,13 @@ class PdfGenerator {
       if (matches.isNotEmpty) datiCliente = Map<String, dynamic>.from(matches.first);
     } catch (_) {}
 
+    final imponibile = articoli.fold<double>(0, (sum, x) {
+      final prezzo = (x['prezzo'] as num?)?.toDouble() ?? 0;
+      final quantita = (x['quantita'] as num?)?.toDouble() ?? 1;
+      return sum + prezzo * quantita;
+    });
+    final iva = imponibile * ivaPercent / 100;
+    final totale = imponibile + iva;
     final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
     final gold = PdfColor.fromHex('#B8860B');
 
@@ -1735,71 +1360,50 @@ class PdfGenerator {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(30, 28, 30, 28),
         build: (_) => [
-          // Intestazione: logo e dati aziendali a sinistra; numero, bollo e data
-          // sempre in alto a destra, all'inizio della pagina.
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Expanded(
-                child: pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    if (logoAzienda != null)
-                      pw.Container(
-                        width: 72,
-                        height: 66,
-                        margin: const pw.EdgeInsets.only(right: 12),
-                        child: pw.Image(logoAzienda, fit: pw.BoxFit.contain),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  if (logo != null)
+                    pw.SizedBox(
+                      width: 285,
+                      height: 125,
+                      child: pw.Image(logo, fit: pw.BoxFit.contain),
+                    )
+                  else
+                    pw.SizedBox(
+                      width: 285,
+                      height: 90,
+                      child: pw.Text(
+                        'BTS',
+                        style: pw.TextStyle(fontSize: 38, fontWeight: pw.FontWeight.bold),
                       ),
-                    pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                      if ((datiAzienda['ragione_sociale'] ?? '').toString().trim().isNotEmpty)
-                        pw.SizedBox(
-                          height: 22,
-                          width: double.infinity,
-                          child: pw.FittedBox(
-                            fit: pw.BoxFit.scaleDown,
-                            alignment: pw.Alignment.centerLeft,
-                            child: pw.Text(
-                              (datiAzienda['ragione_sociale'] ?? '').toString(),
-                              maxLines: 1,
-                              softWrap: false,
-                              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      if ((datiAzienda['indirizzo'] ?? '').toString().trim().isNotEmpty) pw.Text((datiAzienda['indirizzo'] ?? '').toString()),
-                      if ((datiAzienda['telefono'] ?? '').toString().trim().isNotEmpty) pw.Text('Tel: ${(datiAzienda['telefono'] ?? '').toString()}'),
-                      if ((datiAzienda['email'] ?? '').toString().trim().isNotEmpty) pw.Text('Email: ${(datiAzienda['email'] ?? '').toString()}'),
-                      if ((datiAzienda['partita_iva'] ?? '').toString().trim().isNotEmpty) pw.Text('P. IVA: ${(datiAzienda['partita_iva'] ?? '').toString()}'),
-                      if ((datiAzienda['codice_fiscale'] ?? '').toString().trim().isNotEmpty) pw.Text('C.F.: ${(datiAzienda['codice_fiscale'] ?? '').toString()}'),
-                    ])),
-                  ],
-                ),
+                    ),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    'FATTURA PRO-FORMA',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: gold,
+                    ),
+                  ),
+                ],
               ),
-              pw.SizedBox(width: 14),
-              pw.Container(
-                width: 180,
-                alignment: pw.Alignment.topRight,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    pw.SizedBox(height: 3),
-                    pw.Text('Marca da bollo assolta in originale', textAlign: pw.TextAlign.right, maxLines: 1, softWrap: false, style: const pw.TextStyle(fontSize: 9)),
-                    pw.SizedBox(height: 3),
-                    pw.Text('Data: $data'),
-                  ],
-                ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('N. $numero', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Data: $data'),
+                  pw.Text('marca da bollo assolta in originale'),
+                ],
               ),
             ],
           ),
-          pw.SizedBox(height: 8),
-          // Titolo sotto il blocco logo/dati aziendali.
-          pw.Text(
-            'FATTURA PRO-FORMA',
-            style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: gold),
-          ),
-          pw.SizedBox(height: 14),
+          pw.SizedBox(height: 18),
           pw.Text('DATI DESTINATARIO', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
           pw.SizedBox(height: 5),
           if (value('parrocchia').isNotEmpty)
@@ -1811,55 +1415,58 @@ class PdfGenerator {
           if (value('codice_fiscale').isNotEmpty) pw.Text('Codice Fiscale: ${value('codice_fiscale')}'),
           pw.SizedBox(height: 5),
           pw.Text('Cliente: $cliente', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 18),
+          pw.SizedBox(height: 20),
           pw.Table(
             border: pw.TableBorder.all(color: PdfColor.fromHex('#D8C98A')),
-            columnWidths: {
-              0: const pw.FlexColumnWidth(1),
-              1: const pw.FixedColumnWidth(42),
-              2: const pw.FixedColumnWidth(65),
-              3: const pw.FixedColumnWidth(70),
-            },
+            columnWidths: {0: const pw.FlexColumnWidth(4), 1: const pw.FlexColumnWidth(1), 2: const pw.FlexColumnWidth(1.5), 3: const pw.FlexColumnWidth(1.7)},
             children: rows,
           ),
-          pw.SizedBox(height: 14),
-          pw.Container(
+          pw.SizedBox(height: 18),
+          pw.Align(
             alignment: pw.Alignment.centerRight,
+            child: pw.Container(
+              width: 220,
+              child: pw.Column(children: [
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('Imponibile'), pw.Text('${imponibile.toStringAsFixed(2)} €')]),
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [pw.Text('IVA ${ivaPercent.toStringAsFixed(2)}%'), pw.Text('${iva.toStringAsFixed(2)} €')]),
+                pw.Divider(color: gold),
+                pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('TOTALE', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('${totale.toStringAsFixed(2)} €', style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold, color: gold)),
+                ]),
+              ]),
+            ),
+          ),
+          pw.SizedBox(height: 20),
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColor.fromHex('#D8C98A'))),
             child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('Imponibile: € ${articoli.fold<double>(0, (sum, a) => sum + (((a['prezzo'] as num?)?.toDouble() ?? 0) * ((a['quantita'] as num?)?.toDouble() ?? 1))).toStringAsFixed(2)}'),
-                if (ivaPercent == 0)
-                  pw.Text('FUORI CAMPO IVA FCI', style: pw.TextStyle(fontWeight: pw.FontWeight.bold))
-                else
-                  pw.Text('IVA ${ivaPercent.toStringAsFixed(0)}%: € ${(articoli.fold<double>(0, (sum, a) => sum + (((a['prezzo'] as num?)?.toDouble() ?? 0) * ((a['quantita'] as num?)?.toDouble() ?? 1))) * ivaPercent / 100).toStringAsFixed(2)}'),
-                pw.SizedBox(height: 5),
-                pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: pw.BoxDecoration(color: gold),
-                  child: pw.Text(
-                    'TOTALE: € ${(articoli.fold<double>(0, (sum, a) => sum + (((a['prezzo'] as num?)?.toDouble() ?? 0) * ((a['quantita'] as num?)?.toDouble() ?? 1))) * (1 + ivaPercent / 100)).toStringAsFixed(2)}',
-                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                  ),
-                ),
+                pw.Text('DATI AZIENDA', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: gold)),
+                pw.SizedBox(height: 4),
+                pw.Text('di CARPENTIERI ALFONSO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.Text('Sede legale: via Ugo Pirro, 9 - 84100 Salerno'),
+                pw.Text('Cell. 328 697 2865'),
+                pw.Text('P. IVA 06051430657'),
               ],
             ),
           ),
-          pw.SizedBox(height: 18),
+          pw.SizedBox(height: 10),
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColor.fromHex('#D8C98A'))),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(
-                  'Metodo di pagamento: $pagamento',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                ),
-                if ((datiAzienda['iban'] ?? '').toString().trim().isNotEmpty) ...[
-                  pw.SizedBox(height: 4),
-                  pw.Text('IBAN: ${(datiAzienda['iban'] ?? '').toString()}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                ],
+                pw.Text('Metodo di pagamento: $pagamento', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                if (pagamento == 'Bonifico')
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(top: 4),
+                    child: pw.Text('IBAN: ${((iban ?? '').trim().isEmpty ? 'IT28F0538715206000003630167' : iban!.trim())}'),
+                  ),
               ],
             ),
           ),
@@ -1940,6 +1547,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       _cliente.text = cliente ?? '';
       _iva.text = ((f['iva_percent'] as num?)?.toDouble() ?? 0).toString();
       pagamento = (f['pagamento'] ?? 'Contanti').toString();
+      _iban.text = (f['iban'] ?? '').toString();
       try {
         final raw = jsonDecode((f['articoli'] ?? '[]').toString());
         if (raw is List) {
@@ -2080,6 +1688,12 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
       return;
     }
     cliente = _cliente.text.trim();
+    if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Inserisci l\'IBAN per il pagamento con bonifico.')),
+      );
+      return;
+    }
 
     setState(() => salvando = true);
     try {
@@ -2093,7 +1707,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           ivaPercent: ivaPercent,
           totale: totale,
           pagamento: pagamento,
-          iban: null,
+          iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
         );
       } else {
         await DatabaseHelper.instance.insertFattura(
@@ -2103,7 +1717,7 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           ivaPercent: ivaPercent,
           totale: totale,
           pagamento: pagamento,
-          iban: null,
+          iban: pagamento == 'Bonifico' ? _iban.text.trim() : null,
         );
       }
       // Il salvataggio nel database è indipendente dalla generazione del PDF:
@@ -2116,7 +1730,9 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
           articoli: articoli,
           ivaPercent: ivaPercent,
           pagamento: pagamento,
-          iban: null,
+          iban: pagamento == 'Bonifico'
+              ? (_iban.text.trim().isEmpty ? 'IT28F0538715206000003630167' : _iban.text.trim())
+              : null,
         );
       } catch (e) {
         errorePdf = e.toString();
@@ -2294,8 +1910,25 @@ class _CreaFatturaScreenState extends State<CreaFatturaScreen> {
                       DropdownMenuItem(value: 'Contanti', child: Text('Contanti')),
                       DropdownMenuItem(value: 'Bonifico', child: Text('Bonifico')),
                     ],
-                    onChanged: (v) => setState(() => pagamento = v ?? 'Contanti'),
+                    onChanged: (v) => setState(() {
+                      pagamento = v ?? 'Contanti';
+                      if (pagamento == 'Bonifico' && _iban.text.trim().isEmpty) {
+                        _iban.text = 'IT28F0538715206000003630167';
+                      }
+                    }),
                   ),
+                  if (pagamento == 'Bonifico') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _iban,
+                      keyboardType: TextInputType.text,
+                      decoration: const InputDecoration(
+                        labelText: 'IBAN',
+                        hintText: 'Inserisci IBAN',
+                        prefixIcon: Icon(Icons.account_balance),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2541,9 +2174,7 @@ class _ListaFattureScreenState extends State<ListaFattureScreen> {
 }
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.trialDaysRemaining});
-
-  final int? trialDaysRemaining;
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -2556,7 +2187,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int acconti = 0;
   int fatture = 0;
   bool loading = true;
-  String _logoPath = '';
 
   static const _gold = Color(0xFFD4AF37);
   static const _darkGold = Color(0xFF8A6200);
@@ -2578,7 +2208,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       db.getAcconti(),
       db.getFatture(),
     ]);
-    final impostazioni = await db.getImpostazioni();
     if (!mounted) return;
     setState(() {
       preventivi = results[0].length;
@@ -2586,7 +2215,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       prodotti = results[2].length;
       acconti = results[3].length;
       fatture = results[4].length;
-      _logoPath = (impostazioni['logo_path'] ?? '').toString().trim();
       loading = false;
     });
   }
@@ -2635,18 +2263,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: EdgeInsets.fromLTRB(horizontal, 14, horizontal, 22),
               child: Column(
                 children: [
-                  if (widget.trialDaysRemaining != null && widget.trialDaysRemaining! < TrialService.trialDays) ...[
-                    Card(
-                      color: const Color(0xFFFFF6D8),
-                      child: ListTile(
-                        leading: const Icon(Icons.timer_outlined),
-                        title: const Text('Versione demo'),
-                        subtitle: Text('Giorni di prova rimanenti: ${widget.trialDaysRemaining}'),
-                        trailing: const Icon(Icons.info_outline),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.fromLTRB(
@@ -2671,34 +2287,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Expanded(
                           child: SizedBox(
-                            height: 102,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                if (_logoPath.isNotEmpty)
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Image.file(
-                                      File(_logoPath),
-                                      width: 82,
-                                      height: 82,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                                    ),
-                                  ),
-                                if (_logoPath.isNotEmpty) const SizedBox(width: 14),
-                                const Expanded(
-                                    child: Text(
-                                      'Tutto il tuo lavoro, semplice e ordinato.',
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                      letterSpacing: .2,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            height: compact ? 102 : 126,
+                            child: Image.asset(
+                              'assets/logo.png',
+                              fit: BoxFit.contain,
+                              alignment: Alignment.centerLeft,
                             ),
+                          ),
+                        ),
+                        const SizedBox(width: 18),
+                        Container(
+                          width: 1,
+                          height: compact ? 72 : 92,
+                          color: _gold.withValues(alpha: .45),
+                        ),
+                        const SizedBox(width: 22),
+                        const Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'GESTIONE PREVENTIVI',
+                                style: TextStyle(
+                                  color: _darkGold,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              SizedBox(height: 7),
+                              Text(
+                                'Tutto il tuo lavoro,\nsemplice e ordinato.',
+                                style: TextStyle(
+                                  color: Color(0xFF514644),
+                                  fontSize: 16,
+                                  height: 1.25,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -2729,47 +2357,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMenuGrid(double tileHeight) {
     final items = <_DashboardItem>[
-      const _DashboardItem(
+      _DashboardItem(
         Icons.receipt_long_rounded,
         'Nuovo\nPreventivo',
         const NuovoPreventivoScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.people_alt_rounded,
         'Clienti',
         const ClientiScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.inventory_2_rounded,
         'Prodotti /\nServizi',
         const ProdottiScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.list_alt_rounded,
         'Lista\nPreventivi',
         const ListaPreventiviScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.payments_rounded,
         'Acconti',
         const AccontiScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.receipt_rounded,
         'Fatture',
         const ListaFattureScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.request_quote_rounded,
         'Crea\nFattura',
         const CreaFatturaScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.settings_rounded,
         'Gestione\nDati',
         const BackupScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.notifications_active_rounded,
         'Notifiche',
         const NotificheScreen(),
@@ -2783,7 +2411,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             : constraints.maxWidth >= 700
                 ? 3
                 : 2;
-        const gap = 14.0;
+        final gap = 14.0;
         final width =
             (constraints.maxWidth - gap * (columns - 1)) / columns;
 
@@ -5102,6 +4730,209 @@ Future<void> aggiungiAcconto() async {
   }
 }
 
+class SchedaParrocchiaScreen extends StatefulWidget {
+  final Map<String, dynamic> cliente;
+
+  const SchedaParrocchiaScreen({super.key, required this.cliente});
+
+  @override
+  State<SchedaParrocchiaScreen> createState() => _SchedaParrocchiaScreenState();
+}
+
+class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _diffusoriNumero = TextEditingController();
+  final _diffusoriMarca = TextEditingController();
+  final _amplificatore = TextEditingController();
+  final _amplificatoreMarca = TextEditingController();
+  final _microfoniNumero = TextEditingController();
+  final _qualita = TextEditingController();
+  final _audioNote = TextEditingController();
+  final _campaneNumero = TextEditingController();
+  final _programmatore = TextEditingController();
+  final _specificheImpianto = TextEditingController();
+  final _campaneNote = TextEditingController();
+  bool _loading = true;
+  bool _salvataggio = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _carica();
+  }
+
+  Future<void> _carica() async {
+    final scheda = await DatabaseHelper.instance
+        .getSchedaParrocchia(widget.cliente['id'] as int);
+    if (scheda != null) {
+      _diffusoriNumero.text = '${scheda['audio_diffusori_numero'] ?? 0}';
+      _diffusoriMarca.text = '${scheda['audio_diffusori_marca'] ?? ''}';
+      _amplificatore.text = '${scheda['audio_amplificatore'] ?? ''}';
+      _amplificatoreMarca.text = '${scheda['audio_amplificatore_marca'] ?? ''}';
+      _microfoniNumero.text = '${scheda['audio_microfoni_numero'] ?? 0}';
+      _qualita.text = '${scheda['audio_qualita'] ?? ''}';
+      _audioNote.text = '${scheda['audio_note'] ?? ''}';
+      _campaneNumero.text = '${scheda['campane_numero'] ?? 0}';
+      _programmatore.text = '${scheda['campane_programmatore'] ?? ''}';
+      _specificheImpianto.text = '${scheda['campane_specifiche_impianto'] ?? ''}';
+      _campaneNote.text = '${scheda['campane_note'] ?? ''}';
+    } else {
+      _diffusoriNumero.text = '0';
+      _microfoniNumero.text = '0';
+      _campaneNumero.text = '0';
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  void dispose() {
+    for (final c in [
+      _diffusoriNumero, _diffusoriMarca, _amplificatore,
+      _amplificatoreMarca, _microfoniNumero, _qualita, _audioNote,
+      _campaneNumero, _programmatore, _specificheImpianto, _campaneNote,
+    ]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  int _numero(TextEditingController c) => int.tryParse(c.text.trim()) ?? 0;
+
+  Future<void> _salva() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _salvataggio = true);
+    await DatabaseHelper.instance.saveSchedaParrocchia(
+      clienteId: widget.cliente['id'] as int,
+      audioDiffusoriNumero: _numero(_diffusoriNumero),
+      audioDiffusoriMarca: _diffusoriMarca.text.trim(),
+      audioAmplificatore: _amplificatore.text.trim(),
+      audioAmplificatoreMarca: _amplificatoreMarca.text.trim(),
+      audioMicrofoniNumero: _numero(_microfoniNumero),
+      audioQualita: _qualita.text.trim(),
+      audioNote: _audioNote.text.trim(),
+      campaneNumero: _numero(_campaneNumero),
+      campaneProgrammatore: _programmatore.text.trim(),
+      campaneSpecificheImpianto: _specificheImpianto.text.trim(),
+      campaneNote: _campaneNote.text.trim(),
+    );
+    if (!mounted) return;
+    setState(() => _salvataggio = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Scheda parrocchia salvata.')),
+    );
+  }
+
+  Widget _numeroField(String label, TextEditingController controller, IconData icon) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+    );
+  }
+
+  Widget _campo(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
+    return TextFormField(
+      controller: controller,
+      maxLines: maxLines,
+      textCapitalization: TextCapitalization.sentences,
+      decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon), alignLabelWithHint: maxLines > 1),
+    );
+  }
+
+  Widget _sezione({required String titolo, required IconData icon, required List<Widget> children}) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(icon, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 10),
+              Text(titolo, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            ]),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nome = (widget.cliente['nome'] ?? '').toString();
+    final parrocchia = (widget.cliente['parrocchia'] ?? '').toString().trim();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Scheda parrocchia')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 30),
+                children: [
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.church_outlined)),
+                      title: Text(parrocchia.isEmpty ? nome : parrocchia, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: parrocchia.isEmpty ? 'Cliente: $nome' : 'Cliente: $nome',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _sezione(
+                    titolo: 'Impianto Audio',
+                    icon: Icons.volume_up_outlined,
+                    children: [
+                      Row(children: [
+                        Expanded(child: _numeroField('Numero diffusori', _diffusoriNumero, Icons.speaker_group_outlined)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _campo('Marca diffusori', _diffusoriMarca, Icons.branding_watermark_outlined)),
+                      ]),
+                      const SizedBox(height: 12),
+                      Row(children: [
+                        Expanded(child: _campo('Amplificatore / modello', _amplificatore, Icons.settings_input_component_outlined)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _campo('Marca amplificatore', _amplificatoreMarca, Icons.branding_watermark_outlined)),
+                      ]),
+                      const SizedBox(height: 12),
+                      _numeroField('Numero microfoni', _microfoniNumero, Icons.mic_none_outlined),
+                      const SizedBox(height: 12),
+                      _campo('Qualità dell’impianto', _qualita, Icons.star_outline),
+                      const SizedBox(height: 12),
+                      _campo('Note / ultimi interventi effettuati', _audioNote, Icons.notes_outlined, maxLines: 5),
+                    ],
+                  ),
+                  _sezione(
+                    titolo: 'Impianto Campane',
+                    icon: Icons.notifications_active_outlined,
+                    children: [
+                      _numeroField('Numero campane', _campaneNumero, Icons.notifications_none_outlined),
+                      const SizedBox(height: 12),
+                      _campo('Programmatore esistente', _programmatore, Icons.schedule_outlined, maxLines: 2),
+                      const SizedBox(height: 12),
+                      _campo('Specifiche dell’impianto', _specificheImpianto, Icons.build_outlined, maxLines: 4),
+                      const SizedBox(height: 12),
+                      _campo('Note / ultimi interventi effettuati', _campaneNote, Icons.notes_outlined, maxLines: 5),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 52,
+                    child: FilledButton.icon(
+                      onPressed: _salvataggio ? null : _salva,
+                      icon: _salvataggio ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save),
+                      label: Text(_salvataggio ? 'SALVATAGGIO...' : 'SALVA SCHEDA'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
 class ClientiScreen extends StatefulWidget {
   const ClientiScreen({super.key});
 
@@ -5344,6 +5175,15 @@ class _ClientiScreenState extends State<ClientiScreen> {
     }
   }
 
+  Future<void> _apriSchedaParrocchia(Map<String, dynamic> c) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SchedaParrocchiaScreen(cliente: c),
+      ),
+    );
+  }
+
   Future<void> _gestisciAppuntamento(Map<String, dynamic> c) async {
     final esistente = (c['appuntamento'] ?? '').toString().trim();
     final iniziale = esistente.isEmpty
@@ -5564,6 +5404,30 @@ class _ClientiScreenState extends State<ClientiScreen> {
                                   ],
                                 ),
                               ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: Theme.of(context).colorScheme.outlineVariant,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.church_outlined,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                title: const Text(
+                                  'Scheda parrocchia',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: const Text('Impianto audio e campane'),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 18),
+                                onTap: () => _apriSchedaParrocchia(c),
+                              ),
                             ),
                           ),
                           Padding(
@@ -6077,105 +5941,7 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   bool busy = false;
-  bool _appActivated = false;
-  bool _aziendaBloccata = false;
   String? lastMessage;
-
-  final _ragione = TextEditingController();
-  final _indirizzo = TextEditingController();
-  final _telefono = TextEditingController();
-  final _email = TextEditingController();
-  final _piva = TextEditingController();
-  final _cf = TextEditingController();
-  final _iban = TextEditingController();
-  final _activationKey = TextEditingController();
-  String _logoPath = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _caricaImpostazioni();
-  }
-
-  @override
-  void dispose() {
-    _ragione.dispose();
-    _indirizzo.dispose();
-    _telefono.dispose();
-    _email.dispose();
-    _piva.dispose();
-    _cf.dispose();
-    _iban.dispose();
-    _activationKey.dispose();
-    super.dispose();
-  }
-
-  Future<void> _caricaImpostazioni() async {
-    final d = await DatabaseHelper.instance.getImpostazioni();
-    final activated = await TrialService.isActivated();
-    final aziendaBloccata = await DatabaseHelper.instance.isAziendaImportataBloccata();
-    if (!mounted) return;
-    setState(() {
-      _ragione.text = (d['ragione_sociale'] ?? '').toString();
-      _indirizzo.text = (d['indirizzo'] ?? '').toString();
-      _telefono.text = (d['telefono'] ?? '').toString();
-      _email.text = (d['email'] ?? '').toString();
-      _piva.text = (d['partita_iva'] ?? '').toString();
-      _cf.text = (d['codice_fiscale'] ?? '').toString();
-      _iban.text = (d['iban'] ?? '').toString();
-      _activationKey.text = '';
-      _appActivated = activated;
-      _aziendaBloccata = aziendaBloccata;
-      _logoPath = (d['logo_path'] ?? '').toString();
-    });
-  }
-
-  Future<String?> _scegliLogo() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
-    );
-    if (result == null || result.files.single.path == null) return null;
-
-    final source = File(result.files.single.path!);
-    final dir = await getApplicationDocumentsDirectory();
-    final folder = Directory(p.join(dir.path, 'personalizzazione'));
-    if (!await folder.exists()) await folder.create(recursive: true);
-
-    final ext = p.extension(source.path).isEmpty ? '.png' : p.extension(source.path);
-    final destination = File(p.join(folder.path, 'logo_personalizzato$ext'));
-    await source.copy(destination.path);
-    await DatabaseHelper.instance.salvaLogo(destination.path);
-    return destination.path;
-  }
-
-  Future<void> _salvaImpostazioni() async {
-    if (_aziendaBloccata) {
-      setState(() => lastMessage = 'I dati azienda sono bloccati perché importati da un backup.');
-      return;
-    }
-    setState(() => busy = true);
-    try {
-      await DatabaseHelper.instance.salvaImpostazioni({
-        'ragione_sociale': _ragione.text.trim(),
-        'indirizzo': _indirizzo.text.trim(),
-        'telefono': _telefono.text.trim(),
-        'email': _email.text.trim(),
-        'partita_iva': _piva.text.trim(),
-        'codice_fiscale': _cf.text.trim(),
-        'iban': _iban.text.trim(),
-        'logo_path': _logoPath,
-      });
-      if (mounted) {
-        setState(() => lastMessage =
-            "Dati salvati. Logo e dati azienda verranno stampati nei preventivi e nelle fatture; l'IBAN soltanto nelle fatture.");
-      }
-    } catch (e) {
-      if (mounted) setState(() => lastMessage = 'Errore salvataggio dati: $e');
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
 
   Future<void> _esporta() async {
     setState(() => busy = true);
@@ -6202,7 +5968,7 @@ class _BackupScreenState extends State<BackupScreen> {
         allowedExtensions: ['json'],
       );
       if (result == null || result.files.single.path == null) {
-        if (mounted) setState(() => busy = false);
+        setState(() => busy = false);
         return;
       }
       if (!mounted) return;
@@ -6221,7 +5987,6 @@ class _BackupScreenState extends State<BackupScreen> {
       );
       if (conferma != true) return;
       await DatabaseHelper.instance.importBackup(File(result.files.single.path!));
-      await _caricaImpostazioni();
       if (mounted) setState(() => lastMessage = 'Backup importato correttamente.');
     } catch (e) {
       if (mounted) setState(() => lastMessage = 'Backup non valido: $e');
@@ -6243,200 +6008,13 @@ class _BackupScreenState extends State<BackupScreen> {
     }
   }
 
-  Widget _campo(TextEditingController c, String label, IconData icon,
-      {TextInputType? keyboardType}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TextField(
-        controller: c,
-        keyboardType: keyboardType,
-        readOnly: _aziendaBloccata,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Gestione Dati')),
+      appBar: AppBar(title: const Text('Backup e dati')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Dati inseriti manualmente',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      if (_aziendaBloccata)
-                        const Chip(
-                          avatar: Icon(Icons.lock_outline, size: 16),
-                          label: Text('Protetti'),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Questi dati vengono memorizzati nell’app per poterli gestire manualmente. '
-                    "Vengono utilizzati nei preventivi e nelle fatture. L'IBAN viene stampato soltanto nelle fatture.",
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  _campo(_ragione, 'Ragione sociale / nome azienda', Icons.business),
-                  _campo(_indirizzo, 'Indirizzo', Icons.location_on_outlined),
-                  _campo(_telefono, 'Telefono', Icons.phone_outlined, keyboardType: TextInputType.phone),
-                  _campo(_email, 'Email', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
-                  _campo(_piva, 'Partita IVA', Icons.badge_outlined),
-                  _campo(_cf, 'Codice Fiscale', Icons.badge),
-                  _campo(_iban, 'IBAN', Icons.account_balance),
-                  const SizedBox(height: 4),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.image_outlined),
-                    title: const Text('Logo'),
-                    subtitle: Text(
-                      _logoPath.isEmpty
-                          ? 'Nessun logo selezionato'
-                          : _logoPath,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Seleziona logo',
-                      icon: const Icon(Icons.folder_open),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              final path = await _scegliLogo();
-                              if (path != null && mounted) {
-                                setState(() => _logoPath = path);
-                                setState(() => lastMessage = 'Logo aggiornato. I dati azienda e la licenza restano protetti.');
-                              }
-                            },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_aziendaBloccata) ...[
-                    const SizedBox(height: 6),
-                    const Text(
-                      'I dati azienda importati da questo backup sono protetti e non possono essere modificati.',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: busy || _aziendaBloccata ? null : _salvaImpostazioni,
-                      icon: const Icon(Icons.save_rounded),
-                      label: const Text('SALVA DATI'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Attivazione applicazione',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_appActivated)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        color: Colors.green.withOpacity(0.10),
-                        border: Border.all(color: Colors.green.withOpacity(0.35)),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.green),
-                          SizedBox(width: 10),
-                          Text(
-                            'Programma attivato',
-                            style: TextStyle(
-                              color: Colors.green,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else ...[
-                    const Text(
-                      'La versione demo è valida per 30 giorni. Inserisci qui la chiave per attivare definitivamente l’app su questo dispositivo.',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _activationKey,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Chiave di attivazione',
-                        prefixIcon: Icon(Icons.vpn_key_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: busy ? null : () async {
-                          final result = await TrialService.activateResult(_activationKey.text);
-                          if (!mounted) return;
-                          if (result == 'ok') {
-                            setState(() {
-                              _appActivated = true;
-                              lastMessage = 'Programma attivato';
-                            });
-                            _activationKey.clear();
-                          } else {
-                            setState(() => lastMessage = result == 'expired'
-                                ? 'Chiave scaduta: questa chiave è già stata utilizzata.'
-                                : 'Chiave di attivazione non valida.');
-                          }
-                        },
-                        icon: const Icon(Icons.lock_open_outlined),
-                        label: const Text('ATTIVA APPLICAZIONE'),
-                      ),
-                    ),
-                  ],
-                  if (!_appActivated && lastMessage != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      lastMessage!,
-                      style: TextStyle(
-                        color: lastMessage!.contains('attivato') ? Colors.green : Colors.red,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
           Card(
             child: ListTile(
               leading: const Icon(Icons.cloud_done_outlined),
@@ -6475,8 +6053,7 @@ class _BackupScreenState extends State<BackupScreen> {
           ],
           const SizedBox(height: 18),
           const Text(
-            'Il backup contiene clienti, prodotti/servizi, preventivi, fatture, acconti e i dati inseriti nella Gestione Dati. '
-            'L’importazione aggiorna i dati esistenti e aggiunge quelli nuovi, senza cancellare i dati già presenti sul dispositivo.',
+            'Il backup contiene clienti, prodotti/servizi, preventivi e acconti. L’importazione aggiorna i dati esistenti e aggiunge quelli nuovi, senza cancellare i dati già presenti sul dispositivo.',
             style: TextStyle(fontSize: 13),
           ),
         ],
