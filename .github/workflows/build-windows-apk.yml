@@ -50,6 +50,45 @@ jobs:
               p.write_text(s, encoding='utf-8')
           PY
 
+      - name: Enable core library desugaring
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          groovy = Path('android/app/build.gradle')
+          kts = Path('android/app/build.gradle.kts')
+
+          if kts.exists():
+              p = kts
+              s = p.read_text(encoding='utf-8')
+              if 'isCoreLibraryDesugaringEnabled = true' not in s:
+                  marker = '    compileOptions {\n'
+                  if marker in s:
+                      s = s.replace(marker, marker + '        isCoreLibraryDesugaringEnabled = true\n', 1)
+                  else:
+                      raise SystemExit('android/app/build.gradle.kts: compileOptions non trovato')
+              if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:' not in s:
+                  s += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
+              p.write_text(s, encoding='utf-8')
+          elif groovy.exists():
+              p = groovy
+              s = p.read_text(encoding='utf-8')
+              if 'coreLibraryDesugaringEnabled true' not in s:
+                  marker = '    compileOptions {\n'
+                  if marker in s:
+                      s = s.replace(marker, marker + '        coreLibraryDesugaringEnabled true\n', 1)
+                  else:
+                      raise SystemExit('android/app/build.gradle: compileOptions non trovato')
+              if 'coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:' not in s:
+                  s += '\n\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}\n'
+              p.write_text(s, encoding='utf-8')
+          else:
+              raise SystemExit('Nessun build.gradle o build.gradle.kts trovato')
+          PY
+
       - name: Dependencies
         run: flutter pub get
 
