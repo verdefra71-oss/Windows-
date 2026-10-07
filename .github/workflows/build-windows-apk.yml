@@ -50,6 +50,40 @@ jobs:
               p.write_text(s, encoding='utf-8')
           PY
 
+      - name: Configure Android SDK 36
+        shell: bash
+        run: |
+          set -e
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          groovy = Path('android/app/build.gradle')
+          kts = Path('android/app/build.gradle.kts')
+
+          if kts.exists():
+              p = kts
+              s = p.read_text(encoding='utf-8')
+              s = re.sub(r'compileSdk\s*=\s*[^\n]+', 'compileSdk = 36', s, count=1)
+              s = re.sub(r'compileSdk\s+[^\n]+', 'compileSdk 36', s, count=1)
+              if 'compileSdk = 36' not in s and 'compileSdk 36' not in s:
+                  raise SystemExit('Impossibile impostare compileSdk 36 nel build.gradle.kts')
+              p.write_text(s, encoding='utf-8')
+          elif groovy.exists():
+              p = groovy
+              s = p.read_text(encoding='utf-8')
+              s, n = re.subn(r'compileSdk\s*=\s*[^\n]+', 'compileSdk 36', s, count=1)
+              if n == 0:
+                  s, n = re.subn(r'compileSdk\s+[^\n]+', 'compileSdk 36', s, count=1)
+              if n == 0:
+                  raise SystemExit('Impossibile impostare compileSdk 36 nel build.gradle')
+              p.write_text(s, encoding='utf-8')
+          else:
+              raise SystemExit('Nessun build.gradle o build.gradle.kts trovato')
+          PY
+
       - name: Enable core library desugaring
         shell: bash
         run: |
