@@ -2367,47 +2367,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMenuGrid(double tileHeight) {
     final items = <_DashboardItem>[
-      const _DashboardItem(
+      _DashboardItem(
         Icons.receipt_long_rounded,
         'Nuovo\nPreventivo',
         const NuovoPreventivoScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.people_alt_rounded,
         'Clienti',
         const ClientiScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.inventory_2_rounded,
         'Prodotti /\nServizi',
         const ProdottiScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.list_alt_rounded,
         'Lista\nPreventivi',
         const ListaPreventiviScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.payments_rounded,
         'Acconti',
         const AccontiScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.receipt_rounded,
         'Fatture',
         const ListaFattureScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.request_quote_rounded,
         'Crea\nFattura',
         const CreaFatturaScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.settings_rounded,
         'Gestione\nDati',
         const BackupScreen(),
       ),
-      const _DashboardItem(
+      _DashboardItem(
         Icons.notifications_active_rounded,
         'Notifiche',
         const NotificheScreen(),
@@ -2884,7 +2884,6 @@ Future<void> aggiungiAcconto() async {
   @override
   void dispose() {
     clienteController.dispose();
-    dataController.dispose();
     prodottoController.dispose();
     prezzoController.dispose();
     quantitaController.dispose();
@@ -2927,21 +2926,6 @@ Future<void> aggiungiAcconto() async {
         const SnackBar(
           content: Text('Inserisci il cliente e almeno un prodotto.'),
         ),
-      );
-      return;
-    }
-
-    final partiData = dataController.text.trim().split('/');
-    if (partiData.length != 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona una data valida per il preventivo.')),
-      );
-      return;
-    }
-    final dataScelta = DateTime.tryParse('${partiData[2]}-${partiData[1].padLeft(2, '0')}-${partiData[0].padLeft(2, '0')}');
-    if (dataScelta == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona una data valida per il preventivo.')),
       );
       return;
     }
@@ -4263,6 +4247,23 @@ Future<void> aggiungiAcconto() async {
         const SnackBar(
           content: Text('Inserisci il cliente e almeno un prodotto.'),
         ),
+      );
+      return;
+    }
+
+    final partiData = dataController.text.trim().split('/');
+    if (partiData.length != 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona una data valida per il preventivo.')),
+      );
+      return;
+    }
+    final dataScelta = DateTime.tryParse(
+      '${partiData[2]}-${partiData[1].padLeft(2, '0')}-${partiData[0].padLeft(2, '0')}',
+    );
+    if (dataScelta == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona una data valida per il preventivo.')),
       );
       return;
     }
