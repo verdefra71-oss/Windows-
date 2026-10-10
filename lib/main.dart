@@ -786,10 +786,12 @@ CREATE TABLE schede_parrocchie (
     required List<Map<String, dynamic>> acconti,
     required double scontoPercent,
     required bool pagato,
+    required String data,
   }) async {
     final result = await (await database).update(
       'preventivi',
       {
+        'data': data,
         'numero': numero,
         'cliente': cliente,
         'totale': totale,
@@ -1007,6 +1009,7 @@ class PdfGenerator {
     required List<Map<String, dynamic>> acconti,
     required double scontoPercent,
     required bool pagato,
+    String? dataPreventivo,
   }) async {
     // Il font predefinito del pacchetto PDF non contiene il carattere euro (€).
     // Carichiamo quindi un font Unicode con supporto completo al simbolo €.
@@ -1049,7 +1052,7 @@ class PdfGenerator {
     final imponibileScontato = (imponibile - sconto).clamp(0, double.infinity).toDouble();
     final iva = imponibileScontato * ivaPercent / 100;
     final totale = imponibileScontato + iva;
-    final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
+    final data = DateFormat('dd/MM/yyyy').format(DateTime.tryParse(dataPreventivo ?? '') ?? DateTime.now());
 
     // Determina sempre lo stato dal saldo reale, così anche i preventivi
     // già esistenti vengono stampati come PAGATO quando gli acconti coprono
@@ -2881,6 +2884,7 @@ Future<void> aggiungiAcconto() async {
   @override
   void dispose() {
     clienteController.dispose();
+    dataController.dispose();
     prodottoController.dispose();
     prezzoController.dispose();
     quantitaController.dispose();
@@ -2923,6 +2927,21 @@ Future<void> aggiungiAcconto() async {
         const SnackBar(
           content: Text('Inserisci il cliente e almeno un prodotto.'),
         ),
+      );
+      return;
+    }
+
+    final partiData = dataController.text.trim().split('/');
+    if (partiData.length != 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona una data valida per il preventivo.')),
+      );
+      return;
+    }
+    final dataScelta = DateTime.tryParse('${partiData[2]}-${partiData[1].padLeft(2, '0')}-${partiData[0].padLeft(2, '0')}');
+    if (dataScelta == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seleziona una data valida per il preventivo.')),
       );
       return;
     }
@@ -3133,7 +3152,6 @@ Future<void> aggiungiAcconto() async {
               'Dati Cliente',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
             TextField(
               controller: clienteController,
               textCapitalization: TextCapitalization.words,
@@ -3865,6 +3883,7 @@ class _ModificaPreventivoScreenState
     extends State<ModificaPreventivoScreen> {
   late final TextEditingController numeroController;
   late final TextEditingController clienteController;
+  late final TextEditingController dataController;
 
   final prodottoController = TextEditingController();
   final prezzoController = TextEditingController();
@@ -3903,6 +3922,24 @@ class _ModificaPreventivoScreenState
   double get iva => imponibileScontato * ivaPercent / 100;
 
   double get totale => imponibileScontato + iva;
+
+  Future<void> scegliDataPreventivo() async {
+    final parti = dataController.text.split('/');
+    DateTime iniziale = DateTime.now();
+    if (parti.length == 3) {
+      iniziale = DateTime.tryParse('${parti[2]}-${parti[1].padLeft(2, '0')}-${parti[0].padLeft(2, '0')}') ?? iniziale;
+    }
+    final scelta = await showDatePicker(
+      context: context,
+      initialDate: iniziale,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      helpText: 'Seleziona la data del preventivo',
+    );
+    if (scelta != null && mounted) {
+      setState(() => dataController.text = DateFormat('dd/MM/yyyy').format(scelta));
+    }
+  }
 
   Future<void> scegliCliente() async {
     final nome = await selezionaCliente(context);
@@ -4123,6 +4160,8 @@ Future<void> aggiungiAcconto() async {
     clienteController = TextEditingController(
       text: widget.preventivo['cliente'],
     );
+    final dataOriginale = DateTime.tryParse((widget.preventivo['data'] ?? '').toString()) ?? DateTime.now();
+    dataController = TextEditingController(text: DateFormat('dd/MM/yyyy').format(dataOriginale));
     scontoController = TextEditingController(
       text: ((widget.preventivo['sconto_percent'] as num?)?.toDouble() ?? 0).toStringAsFixed(0),
     );
@@ -4254,6 +4293,7 @@ Future<void> aggiungiAcconto() async {
         acconti: acconti,
         scontoPercent: scontoPercent,
         pagato: pagatoEffettivo,
+        data: dataScelta.toIso8601String(),
       );
 
       if (updated == 0) {
@@ -4269,6 +4309,7 @@ Future<void> aggiungiAcconto() async {
         acconti: acconti,
         scontoPercent: scontoPercent,
         pagato: pagatoEffettivo,
+        dataPreventivo: dataScelta.toIso8601String(),
       );
 
       if (mounted) {
@@ -4431,6 +4472,17 @@ Future<void> aggiungiAcconto() async {
               decoration: const InputDecoration(
                 labelText: 'Numero preventivo',
                 prefixIcon: Icon(Icons.numbers),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: dataController,
+              readOnly: true,
+              onTap: scegliDataPreventivo,
+              decoration: const InputDecoration(
+                labelText: 'Data preventivo',
+                prefixIcon: Icon(Icons.calendar_today_outlined),
+                suffixIcon: Icon(Icons.edit_calendar_outlined),
               ),
             ),
             const SizedBox(height: 8),
