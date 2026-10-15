@@ -5332,6 +5332,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['parrocchia'] ?? '');
     final paese = TextEditingController(text: cliente?['paese'] ?? '');
     final cap = TextEditingController(text: cliente?['cap'] ?? '');
+    final datiGoogleMaps = TextEditingController();
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
     if (appuntamento.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
@@ -5381,6 +5382,84 @@ class _ClientiScreenState extends State<ClientiScreen> {
           );
         }
       }
+    }
+
+
+    void inserisciDatiDaGoogleMaps() {
+      final testo = datiGoogleMaps.text.trim();
+      if (testo.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Incolla prima le informazioni copiate da Google Maps')),
+        );
+        return;
+      }
+
+      final righe = testo
+          .split(RegExp(r'[\r\n]+'))
+          .map((r) => r.trim())
+          .where((r) => r.isNotEmpty)
+          .toList();
+
+      final capRegex = RegExp(r'\b\d{5}\b');
+      String? capTrovato;
+      String? rigaCap;
+      for (final riga in righe) {
+        final match = capRegex.firstMatch(riga);
+        if (match != null) {
+          capTrovato = match.group(0);
+          rigaCap = riga;
+          break;
+        }
+      }
+
+      if (capTrovato != null) {
+        cap.text = capTrovato;
+        // Una riga del tipo "80022 Arzano NA" consente anche di ricavare il comune.
+        final comune = rigaCap!
+            .replaceFirst(capRegex, '')
+            .replaceAll(RegExp(r'\b[A-Z]{2}\b'), '')
+            .replaceAll(RegExp(r'[,()]'), ' ')
+            .trim();
+        if (comune.isNotEmpty && paese.text.trim().isEmpty) {
+          paese.text = comune;
+        }
+      }
+
+      final nomeParrocchia = parrocchia.text.trim().toLowerCase();
+      final righeIndirizzo = righe.where((riga) {
+        final lower = riga.toLowerCase();
+        if (lower == nomeParrocchia || lower.contains('@')) return false;
+        if (RegExp(r'^\+?[\d\s()./-]{7,}$').hasMatch(riga)) return false;
+        if (RegExp(r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama)\b', caseSensitive: false).hasMatch(riga)) return false;
+        if (capRegex.hasMatch(riga)) return false;
+        return RegExp(r'\b(via|viale|piazza|corso|largo|vicolo|strada|traversa|lungomare|località|contrada|p\.zza|p\.za)\b', caseSensitive: false)
+            .hasMatch(riga);
+      }).toList();
+
+      if (righeIndirizzo.isNotEmpty) {
+        indirizzo.text = righeIndirizzo.first;
+      } else {
+        // Se non è riconoscibile una via, usa una riga non descrittiva come suggerimento.
+        final candidate = righe.where((riga) {
+          final lower = riga.toLowerCase();
+          return lower != nomeParrocchia &&
+              !capRegex.hasMatch(riga) &&
+              !RegExp(r'^\+?[\d\s()./-]{7,}$').hasMatch(riga) &&
+              !RegExp(r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama)\b', caseSensitive: false).hasMatch(riga);
+        }).toList();
+        if (candidate.isNotEmpty && indirizzo.text.trim().isEmpty) {
+          indirizzo.text = candidate.first;
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(capTrovato != null
+              ? 'Dati inseriti. Controlla indirizzo, paese e CAP prima di salvare.'
+              : 'Testo elaborato. Il CAP non è stato riconosciuto: inseriscilo manualmente.'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
 
     await showModalBottomSheet(
@@ -5445,6 +5524,29 @@ class _ClientiScreenState extends State<ClientiScreen> {
                     onPressed: cercaIndirizzo,
                     icon: const Icon(Icons.search),
                     label: const Text('Cerca parrocchia su Google Maps'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: datiGoogleMaps,
+                  minLines: 2,
+                  maxLines: 5,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Informazioni copiate da Google Maps',
+                    hintText: 'Apri Google Maps, copia i dettagli della parrocchia e incollali qui',
+                    helperText: 'Poi premi “Inserisci dati nelle caselle”. Verifica sempre i dati.',
+                    prefixIcon: Icon(Icons.content_paste_search),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: inserisciDatiDaGoogleMaps,
+                    icon: const Icon(Icons.content_paste_go),
+                    label: const Text('Inserisci dati nelle caselle'),
                   ),
                 ),
                 const SizedBox(height: 12),
