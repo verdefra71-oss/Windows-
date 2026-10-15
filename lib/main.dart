@@ -371,10 +371,17 @@ CREATE TABLE schede_parrocchie (
 ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 15) {
-          await db.execute("ALTER TABLE clienti ADD COLUMN paese TEXT");
-          await db.execute("ALTER TABLE clienti ADD COLUMN cap TEXT");
+        // Migrazione tollerante: alcune versioni precedenti potrebbero aver
+        // già creato una delle colonne, anche con un numero versione più basso.
+        Future<void> aggiungiColonnaSeManca(String tabella, String colonna, String definizione) async {
+          final colonne = await db.rawQuery('PRAGMA table_info($tabella)');
+          final presente = colonne.any((r) => (r['name'] as String?) == colonna);
+          if (!presente) {
+            await db.execute('ALTER TABLE $tabella ADD COLUMN $colonna $definizione');
+          }
         }
+        await aggiungiColonnaSeManca('clienti', 'paese', 'TEXT');
+        await aggiungiColonnaSeManca('clienti', 'cap', 'TEXT');
         if (oldVersion < 2) {
           await db.execute(
             "ALTER TABLE preventivi ADD COLUMN articoli TEXT NOT NULL DEFAULT '[]'",
@@ -5429,13 +5436,32 @@ class _ClientiScreenState extends State<ClientiScreen> {
       if (capTrovato != null) {
         cap.text = capTrovato;
         // Una riga del tipo "80022 Arzano NA" consente anche di ricavare il comune.
-        final comune = rigaCap!
-            .replaceFirst(capRegex, '')
+        // Dopo il CAP Google Maps riporta normalmente comune/provincia/paese.
+        // Preferiamo la parte successiva al CAP, evitando di copiare la via nel comune.
+        final matchCapRiga = capRegex.firstMatch(rigaCap!);
+        final dopoCap = matchCapRiga == null
+            ? ''
+            : rigaCap.substring(matchCapRiga.end);
+        final comune = dopoCap
             .replaceAll(RegExp(r'\b[A-Z]{2}\b'), '')
-            .replaceAll(RegExp(r'[,()]'), ' ')
+            .replaceAll(RegExp(r'[,;()]'), ' ')
+            .replaceAll(RegExp(r'\s{2,}'), ' ')
             .trim();
-        if (comune.isNotEmpty && paese.text.trim().isEmpty) {
+        if (comune.isNotEmpty) {
           paese.text = comune;
+        } else if (paese.text.trim().isEmpty) {
+          // Fallback per risultati Maps in cui il comune è su una riga separata.
+          for (final riga in righe.reversed) {
+            final candidata = riga.replaceAll(RegExp(r'[,()]'), ' ').trim();
+            if (candidata.isNotEmpty && candidata != rigaCap &&
+                !candidata.contains('@') && !capRegex.hasMatch(candidata) &&
+                !RegExp(r'^\+?[\d\s()./-]{7,}$').hasMatch(candidata) &&
+                !RegExp(r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama|foto)\b', caseSensitive: false).hasMatch(candidata) &&
+                !RegExp(r'\b(via|viale|piazza|corso|largo|vicolo|strada|traversa|lungomare|località|contrada)\b', caseSensitive: false).hasMatch(candidata) && candidata.length < 70) {
+              paese.text = candidata;
+              break;
+            }
+          }
         }
       }
 
@@ -5573,7 +5599,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   controller: paese,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
-                    labelText: 'Paese / Comune',
+                    labelText: 'Comune / Città',
                     prefixIcon: Icon(Icons.location_city_outlined),
                   ),
                 ),
@@ -5672,6 +5698,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                               .replaceAll(RegExp(r'^[,;\s]+|[,;\s]+$'), '')
                               .replaceAll(RegExp(r'\s{2,}'), ' ')
                               .trim();
+                      try {
                       int clienteId;
                       if (cliente == null) {
                         clienteId = await DatabaseHelper.instance.insertCliente(
@@ -5711,6 +5738,13 @@ class _ClientiScreenState extends State<ClientiScreen> {
 
                       if (ctx.mounted) Navigator.pop(ctx);
                       await _carica();
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Errore nel salvataggio del cliente: $e')),
+                          );
+                        }
+                      }
                     },
                     icon: const Icon(Icons.save),
                     label: Text(
