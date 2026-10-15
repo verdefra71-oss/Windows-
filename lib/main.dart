@@ -865,90 +865,110 @@ CREATE TABLE schede_parrocchie (
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Backup non valido.');
     }
-    final clienti = List<Map<String, dynamic>>.from(
-      (decoded['clienti'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
-    );
-    final prodotti = List<Map<String, dynamic>>.from(
-      (decoded['prodotti'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
-    );
-    final preventivi = List<Map<String, dynamic>>.from(
-      (decoded['preventivi'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
-    );
-    final fatture = List<Map<String, dynamic>>.from(
-      (decoded['fatture'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
-    );
-    final schedeParrocchie = List<Map<String, dynamic>>.from(
-      (decoded['schede_parrocchie'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
-    );
+
+    List<Map<String, dynamic>> rowsFor(String key) {
+      final value = decoded[key];
+      if (value is! List) return <Map<String, dynamic>>[];
+      return value
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+
+    final clienti = rowsFor('clienti');
+    final prodotti = rowsFor('prodotti');
+    final preventivi = rowsFor('preventivi');
+    final fatture = rowsFor('fatture');
+    final schede = rowsFor('schede_parrocchie');
     final db = await database;
 
-    // L'importazione è un MERGE, non una sostituzione del database.
-    // Se una riga del backup ha un id già presente, viene aggiornata;
-    // se l'id non esiste, la riga viene aggiunta con un nuovo id.
-    // In questo modo i dati presenti sul dispositivo che non sono nel
-    // backup non vengono mai cancellati.
+    // MERGE conservativo: non elimina e non aggiorna mai una riga locale.
+    // Identifica i duplicati con chiavi funzionali (nome/numero), perché gli
+    // ID possono collidere quando il backup proviene da un altro dispositivo.
     await db.transaction((txn) async {
-      Future<void> mergeRows(
-        String table,
-        List<Map<String, dynamic>> rows,
-      ) async {
-        if (rows.isEmpty) return;
+      Future<Set<String>> existingKeys(String table, String column) async {
+        final result = await txn.query(table, columns: [column]);
+        return result
+            .map((r) => (r[column] ?? '').toString().trim().toLowerCase())
+            .where((v) => v.isNotEmpty)
+            .toSet();
+      }
 
+      Future<int> insertRow(String table, Map<String, dynamic> original) async {
         final info = await txn.rawQuery('PRAGMA table_info($table)');
         final columns = info
             .map((c) => c['name']?.toString())
             .whereType<String>()
             .toSet();
-
-        for (final original in rows) {
-          // Ignora eventuali campi sconosciuti presenti in backup di versioni
-          // diverse dell'app, evitando che l'importazione si interrompa.
-          final row = <String, dynamic>{};
-          for (final entry in original.entries) {
-            if (columns.contains(entry.key)) {
-              row[entry.key] = entry.value;
-            }
+        final row = <String, dynamic>{};
+        for (final entry in original.entries) {
+          if (entry.key != 'id' && columns.contains(entry.key)) {
+            row[entry.key] = entry.value;
           }
-          if (row.isEmpty) continue;
-
-          final rawId = row['id'];
-          final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
-
-          if (id != null && id > 0) {
-            final existing = await txn.query(
-              table,
-              columns: const ['id'],
-              where: 'id = ?',
-              whereArgs: [id],
-              limit: 1,
-            );
-
-            if (existing.isNotEmpty) {
-              final values = Map<String, dynamic>.from(row)..remove('id');
-              if (values.isNotEmpty) {
-                await txn.update(
-                  table,
-                  values,
-                  where: 'id = ?',
-                  whereArgs: [id],
-                );
-              }
-              continue;
-            }
-          }
-
-          // Per una riga nuova non forziamo l'id del backup: SQLite assegna
-          // quello corretto evitando collisioni con dati già presenti.
-          row.remove('id');
-          await txn.insert(table, row);
         }
+        if (row.isEmpty) return -1;
+        return await txn.insert(table, row);
       }
 
-      await mergeRows('clienti', clienti);
-      await mergeRows('prodotti', prodotti);
-      await mergeRows('preventivi', preventivi);
-      await mergeRows('fatture', fatture);
-      await mergeRows('schede_parrocchie', schedeParrocchie);
+      final clienteIdMap = <int, int>{};
+      final clientiKeys = await existingKeys('clienti', 'nome');
+      for (final c in clienti) {
+        final rawId = c['id'];
+        final oldId = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
+        final key = (c['nome'] ?? '').toString().trim().toLowerCase();
+        int newId;
+        if (key.isNotEmpty && clientiKeys.contains(key)) {
+          final found = await txn.query('clienti', columns: const ['id'],
+              where: 'LOWER(TRIM(nome)) = ?', whereArgs: [key], limit: 1);
+          newId = (found.first['id'] as num).toInt();
+        } else {
+          newId = await insertRow('clienti', c);
+          if (key.isNotEmpty) clientiKeys.add(key);
+        }
+        if (oldId != null && newId > 0) clienteIdMap[oldId] = newId;
+      }
+
+      final prodottiKeys = await existingKeys('prodotti', 'nome');
+      for (final row in prodotti) {
+        final key = (row['nome'] ?? '').toString().trim().toLowerCase();
+        if (key.isNotEmpty && prodottiKeys.contains(key)) continue;
+        await insertRow('prodotti', row);
+        if (key.isNotEmpty) prodottiKeys.add(key);
+      }
+
+      final preventiviKeys = await existingKeys('preventivi', 'numero');
+      for (final row in preventivi) {
+        final key = (row['numero'] ?? '').toString().trim().toLowerCase();
+        if (key.isNotEmpty && preventiviKeys.contains(key)) continue;
+        await insertRow('preventivi', row);
+        if (key.isNotEmpty) preventiviKeys.add(key);
+      }
+
+      final fattureKeys = await existingKeys('fatture', 'numero');
+      for (final row in fatture) {
+        final key = (row['numero'] ?? '').toString().trim().toLowerCase();
+        if (key.isNotEmpty && fattureKeys.contains(key)) continue;
+        await insertRow('fatture', row);
+        if (key.isNotEmpty) fattureKeys.add(key);
+      }
+
+      final schedeKeys = await existingKeys('schede_parrocchie', 'cliente_id');
+      for (final original in schede) {
+        final rawClienteId = original['cliente_id'];
+        final oldClienteId = rawClienteId is num
+            ? rawClienteId.toInt()
+            : int.tryParse('$rawClienteId');
+        final mappedId = oldClienteId == null
+            ? null
+            : clienteIdMap[oldClienteId];
+        if (mappedId == null) continue;
+        final key = mappedId.toString().toLowerCase();
+        if (schedeKeys.contains(key)) continue;
+        final row = Map<String, dynamic>.from(original)
+          ..['cliente_id'] = mappedId;
+        await insertRow('schede_parrocchie', row);
+        schedeKeys.add(key);
+      }
     });
     await createAutomaticBackup();
   }
