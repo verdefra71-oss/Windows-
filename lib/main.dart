@@ -2381,47 +2381,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildMenuGrid(double tileHeight) {
     final items = <_DashboardItem>[
-      _DashboardItem(
+      const _DashboardItem(
         Icons.receipt_long_rounded,
         'Nuovo\nPreventivo',
         const NuovoPreventivoScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.people_alt_rounded,
         'Clienti',
         const ClientiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.inventory_2_rounded,
         'Prodotti /\nServizi',
         const ProdottiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.list_alt_rounded,
         'Lista\nPreventivi',
         const ListaPreventiviScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.payments_rounded,
         'Acconti',
         const AccontiScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.receipt_rounded,
         'Fatture',
         const ListaFattureScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.request_quote_rounded,
         'Crea\nFattura',
         const CreaFatturaScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.settings_rounded,
         'Gestione\nDati',
         const BackupScreen(),
       ),
-      _DashboardItem(
+      const _DashboardItem(
         Icons.notifications_active_rounded,
         'Notifiche',
         const NotificheScreen(),
@@ -5496,8 +5496,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
       // '80022 Arzano NA', e la aggiunge al campo Indirizzo insieme alla via.
       String? localitaTrovata;
       if (rigaCap != null && capTrovato != null) {
-        final dopoCap = rigaCap!.substring(
-          rigaCap!.indexOf(capTrovato!) + capTrovato!.length,
+        final dopoCap = rigaCap.substring(
+          rigaCap.indexOf(capTrovato) + capTrovato.length,
         ).replaceAll(RegExp(r'^[,;\s]+|[,;\s]+$'), '').trim();
         if (dopoCap.isNotEmpty) localitaTrovata = dopoCap;
       }
@@ -5505,12 +5505,14 @@ class _ClientiScreenState extends State<ClientiScreen> {
       // Se la località non è sulla riga del CAP, cerca le righe geografiche
       // vicine, evitando nome attività, telefono, sito e informazioni promozionali.
       if (localitaTrovata == null) {
-        final indiceCap = rigaCap == null ? -1 : righe.indexOf(rigaCap!);
+        final indiceCap = rigaCap == null ? -1 : righe.indexOf(rigaCap);
         for (var i = indiceCap + 1; i < righe.length; i++) {
           final riga = righe[i];
           if (riga.toLowerCase() == nomeParrocchia ||
               riga.contains('@') || telefoni.hasMatch(riga) ||
-              descrizioni.hasMatch(riga) || vie.hasMatch(riga)) continue;
+              descrizioni.hasMatch(riga) || vie.hasMatch(riga)) {
+            continue;
+          }
           if (RegExp(r'\b(Italia|Italy|Napoli|Naples|Campania|Lazio|Roma|Rome)\b', caseSensitive: false).hasMatch(riga) ||
               RegExp(r'^[A-ZÀ-Ü][a-zà-ÿ]+(?:[ ,]+[A-ZÀ-Ü][a-zà-ÿ]+){0,4}$').hasMatch(riga)) {
             localitaTrovata = riga;
@@ -5523,13 +5525,13 @@ class _ClientiScreenState extends State<ClientiScreen> {
         indirizzo.text = [
           indirizzoTrovato,
           if (capTrovato != null) capTrovato,
-          if (localitaTrovata != null && localitaTrovata!.isNotEmpty) localitaTrovata!,
+          if (localitaTrovata != null && localitaTrovata.isNotEmpty) localitaTrovata,
         ].where((v) => v.isNotEmpty).toSet().join(', ');
       } else if (indirizzo.text.trim().isNotEmpty) {
         indirizzo.text = [
           indirizzo.text.trim(),
           if (capTrovato != null && !indirizzo.text.contains(capTrovato)) capTrovato,
-          if (localitaTrovata != null && !indirizzo.text.contains(localitaTrovata!)) localitaTrovata!,
+          if (localitaTrovata != null && !indirizzo.text.contains(localitaTrovata)) localitaTrovata,
         ].where((v) => v.isNotEmpty).toSet().join(', ');
       }
       ScaffoldMessenger.of(context).showSnackBar(
