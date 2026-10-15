@@ -5492,18 +5492,51 @@ class _ClientiScreenState extends State<ClientiScreen> {
         }
       }
 
+      // Ricava anche comune/città dalla parte successiva al CAP, ad esempio
+      // '80022 Arzano NA', e la aggiunge al campo Indirizzo insieme alla via.
+      String? localitaTrovata;
+      if (rigaCap != null && capTrovato != null) {
+        final dopoCap = rigaCap!.substring(
+          rigaCap!.indexOf(capTrovato!) + capTrovato!.length,
+        ).replaceAll(RegExp(r'^[,;\s]+|[,;\s]+$'), '').trim();
+        if (dopoCap.isNotEmpty) localitaTrovata = dopoCap;
+      }
+
+      // Se la località non è sulla riga del CAP, cerca le righe geografiche
+      // vicine, evitando nome attività, telefono, sito e informazioni promozionali.
+      if (localitaTrovata == null) {
+        final indiceCap = rigaCap == null ? -1 : righe.indexOf(rigaCap!);
+        for (var i = indiceCap + 1; i < righe.length; i++) {
+          final riga = righe[i];
+          if (riga.toLowerCase() == nomeParrocchia ||
+              riga.contains('@') || telefoni.hasMatch(riga) ||
+              descrizioni.hasMatch(riga) || vie.hasMatch(riga)) continue;
+          if (RegExp(r'\b(Italia|Italy|Napoli|Naples|Campania|Lazio|Roma|Rome)\b', caseSensitive: false).hasMatch(riga) ||
+              RegExp(r'^[A-ZÀ-Ü][a-zà-ÿ]+(?:[ ,]+[A-ZÀ-Ü][a-zà-ÿ]+){0,4}$').hasMatch(riga)) {
+            localitaTrovata = riga;
+            break;
+          }
+        }
+      }
+
       if (indirizzoTrovato != null && indirizzoTrovato.isNotEmpty) {
-        indirizzo.text = [indirizzoTrovato, if (capTrovato != null) capTrovato]
-            .where((v) => v.isNotEmpty).join(', ');
-      } else if (capTrovato != null && indirizzo.text.trim().isNotEmpty &&
-          !indirizzo.text.contains(capTrovato)) {
-        indirizzo.text = '${indirizzo.text.trim()}, $capTrovato';
+        indirizzo.text = [
+          indirizzoTrovato,
+          if (capTrovato != null) capTrovato,
+          if (localitaTrovata != null && localitaTrovata!.isNotEmpty) localitaTrovata!,
+        ].where((v) => v.isNotEmpty).toSet().join(', ');
+      } else if (indirizzo.text.trim().isNotEmpty) {
+        indirizzo.text = [
+          indirizzo.text.trim(),
+          if (capTrovato != null && !indirizzo.text.contains(capTrovato)) capTrovato,
+          if (localitaTrovata != null && !indirizzo.text.contains(localitaTrovata!)) localitaTrovata!,
+        ].where((v) => v.isNotEmpty).toSet().join(', ');
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(capTrovato != null
-              ? 'Dati inseriti. Controlla indirizzo, paese e CAP prima di salvare.'
-              : 'Testo elaborato. Il CAP non è stato riconosciuto: inseriscilo manualmente.'),
+              ? 'Dati inseriti nell’indirizzo: via, CAP e comune/città. Controlla prima di salvare.'
+              : 'Testo elaborato. Controlla e completa manualmente via, CAP e comune/città.'),
           duration: const Duration(seconds: 4),
         ),
       );
