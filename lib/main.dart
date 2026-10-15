@@ -5339,62 +5339,49 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final key = GlobalKey<FormState>();
 
     Future<void> cercaIndirizzo() async {
-      if (parrocchia.text.trim().isEmpty || paese.text.trim().isEmpty) {
+      final nome = parrocchia.text.trim();
+      if (nome.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Inserisci prima parrocchia e paese')),
+          const SnackBar(content: Text('Inserisci prima il nome della parrocchia')),
         );
         return;
       }
-      if (mounted) setState(() => ricercaIndirizzo = true);
+
+      // Google Maps URLs non richiedono una chiave API.
+      final query = [
+        nome,
+        if (paese.text.trim().isNotEmpty) paese.text.trim(),
+        'Italia',
+      ].join(', ');
+      final uri = Uri.https(
+        'www.google.com',
+        '/maps/search/',
+        {'api': '1', 'query': query},
+      );
+
       try {
-        final query = '${parrocchia.text.trim()}, ${paese.text.trim()}, Italia';
-        final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-          'q': query,
-          'format': 'jsonv2',
-          'addressdetails': '1',
-          'limit': '5',
-          'countrycodes': 'it',
-        });
-        final response = await http.get(uri, headers: {
-          'User-Agent': 'PreventiviApp/1.1 (address lookup)',
-          'Accept-Language': 'it',
-        }).timeout(const Duration(seconds: 12));
-        if (response.statusCode != 200) {
-          throw Exception('Servizio non disponibile');
-        }
-        final results = jsonDecode(response.body) as List;
-        if (results.isEmpty) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Nessun indirizzo trovato. Controlla il nome della parrocchia e il paese.')),
-            );
-          }
-          return;
-        }
-        final result = Map<String, dynamic>.from(results.first as Map);
-        final address = Map<String, dynamic>.from(result['address'] as Map? ?? {});
-        final street = [
-          address['road'],
-          address['house_number'],
-        ].where((v) => v != null && v.toString().trim().isNotEmpty).join(' ');
-        final postalCode = (address['postcode'] ?? '').toString();
-        if (street.isNotEmpty) indirizzo.text = street;
-        if (postalCode.isNotEmpty) cap.text = postalCode;
-        if (mounted) {
+        final aperto = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!aperto && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(street.isNotEmpty || postalCode.isNotEmpty
-              ? 'Indirizzo e CAP aggiornati: verifica sempre i dati.'
-              : 'Trovata la parrocchia, ma indirizzo o CAP non disponibili.')),
+            const SnackBar(content: Text('Impossibile aprire Google Maps')),
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Seleziona la parrocchia corretta su Google Maps e inserisci indirizzo e CAP verificati.'),
+              duration: Duration(seconds: 5),
+            ),
           );
         }
       } catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Errore nella ricerca online. Verifica la connessione e riprova.')),
+            const SnackBar(content: Text('Errore nell’apertura di Google Maps')),
           );
         }
-      } finally {
-        if (mounted) setState(() => ricercaIndirizzo = false);
       }
     }
 
@@ -5461,7 +5448,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                     icon: ricercaIndirizzo
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.search),
-                    label: Text(ricercaIndirizzo ? 'Ricerca in corso...' : 'Cerca automaticamente indirizzo e CAP'),
+                    label: Text(ricercaIndirizzo ? 'Ricerca in corso...' : 'Cerca parrocchia su Google Maps'),
                   ),
                 ),
                 const SizedBox(height: 12),
