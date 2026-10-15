@@ -5445,7 +5445,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
       for (final riga in righe) {
         if (capRegex.hasMatch(riga)) {
           final primaDelCap = riga.substring(0, capRegex.firstMatch(riga)!.start)
-              .replaceAll(RegExp(r'[,;\\-]+$'), '')
+              .replaceAll(RegExp(r'[,;\\-]+\s*$'), '')
+              .replaceAll(RegExp(r'\s*,\s*'), ', ')
+              .replaceAll(RegExp(r',\s*,+'), ',')
               .trim();
           if (primaDelCap.isNotEmpty &&
               primaDelCap.toLowerCase() != nomeParrocchia &&
@@ -5526,13 +5528,13 @@ class _ClientiScreenState extends State<ClientiScreen> {
           indirizzoTrovato,
           if (capTrovato != null) capTrovato,
           if (localitaTrovata != null && localitaTrovata.isNotEmpty) localitaTrovata,
-        ].where((v) => v.isNotEmpty).toSet().join(', ');
+        ].where((v) => v.isNotEmpty).toSet().join(', ').replaceAll(RegExp(r'\s*,\s*'), ', ').replaceAll(RegExp(r',\s*,+'), ',').trim();
       } else if (indirizzo.text.trim().isNotEmpty) {
         indirizzo.text = [
           indirizzo.text.trim(),
           if (capTrovato != null && !indirizzo.text.contains(capTrovato)) capTrovato,
           if (localitaTrovata != null && !indirizzo.text.contains(localitaTrovata)) localitaTrovata,
-        ].where((v) => v.isNotEmpty).toSet().join(', ');
+        ].where((v) => v.isNotEmpty).toSet().join(', ').replaceAll(RegExp(r'\s*,\s*'), ', ').replaceAll(RegExp(r',\s*,+'), ',').trim();
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
