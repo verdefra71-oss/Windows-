@@ -284,7 +284,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 15,
+      version: 16,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -297,6 +297,8 @@ CREATE TABLE clienti (
   codice_fiscale TEXT,
   parrocchia TEXT,
   paese TEXT,
+  citta TEXT,
+  nazione TEXT,
   cap TEXT,
   appuntamento TEXT
 )
@@ -382,6 +384,8 @@ CREATE TABLE schede_parrocchie (
         }
         await aggiungiColonnaSeManca('clienti', 'paese', 'TEXT');
         await aggiungiColonnaSeManca('clienti', 'cap', 'TEXT');
+        await aggiungiColonnaSeManca('clienti', 'citta', 'TEXT');
+        await aggiungiColonnaSeManca('clienti', 'nazione', 'TEXT');
         if (oldVersion < 2) {
           await db.execute(
             "ALTER TABLE preventivi ADD COLUMN articoli TEXT NOT NULL DEFAULT '[]'",
@@ -593,6 +597,8 @@ CREATE TABLE schede_parrocchie (
     String codiceFiscale = '',
     String parrocchia = '',
     String paese = '',
+    String citta = '',
+    String nazione = 'Italia',
     String cap = '',
     String? appuntamento,
   }) async {
@@ -605,6 +611,8 @@ CREATE TABLE schede_parrocchie (
       'codice_fiscale': codiceFiscale,
       'parrocchia': parrocchia,
       'paese': paese,
+      'citta': citta,
+      'nazione': nazione,
       'cap': cap,
       'appuntamento': appuntamento,
     });
@@ -622,6 +630,8 @@ CREATE TABLE schede_parrocchie (
     String codiceFiscale = '',
     String parrocchia = '',
     String paese = '',
+    String citta = '',
+    String nazione = 'Italia',
     String cap = '',
     String? appuntamento,
   }) async {
@@ -636,6 +646,8 @@ CREATE TABLE schede_parrocchie (
         'codice_fiscale': codiceFiscale,
         'parrocchia': parrocchia,
         'paese': paese,
+        'citta': citta,
+        'nazione': nazione,
         'cap': cap,
         'appuntamento': appuntamento,
       },
@@ -5343,7 +5355,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['codice_fiscale'] ?? '');
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
-    final paese = TextEditingController(text: cliente?['paese'] ?? '');
+    final paese = TextEditingController(text: cliente?['paese'] ?? cliente?['citta'] ?? '');
+    final citta = TextEditingController(text: cliente?['citta'] ?? cliente?['paese'] ?? '');
+    final nazione = TextEditingController(text: cliente?['nazione'] ?? 'Italia');
     final cap = TextEditingController(text: capIniziale);
     final datiGoogleMaps = TextEditingController();
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
@@ -5442,14 +5456,19 @@ class _ClientiScreenState extends State<ClientiScreen> {
         final dopoCap = matchCapRiga == null
             ? ''
             : rigaCap.substring(matchCapRiga.end);
-        final comune = dopoCap
+        var comune = dopoCap
             .replaceAll(RegExp(r'\b[A-Z]{2}\b'), '')
             .replaceAll(RegExp(r'[,;()]'), ' ')
             .replaceAll(RegExp(r'\s{2,}'), ' ')
             .trim();
+        if (RegExp(r'\bItalia\b', caseSensitive: false).hasMatch(comune)) {
+          nazione.text = 'Italia';
+          comune = comune.replaceAll(RegExp(r'\bItalia\b', caseSensitive: false), '').trim();
+        }
         if (comune.isNotEmpty) {
-          paese.text = comune;
-        } else if (paese.text.trim().isEmpty) {
+          citta.text = comune;
+          paese.text = comune; // compatibilità con le versioni precedenti
+        } else if (citta.text.trim().isEmpty) {
           // Fallback per risultati Maps in cui il comune è su una riga separata.
           for (final riga in righe.reversed) {
             final candidata = riga.replaceAll(RegExp(r'[,()]'), ' ').trim();
@@ -5458,11 +5477,16 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 !RegExp(r'^\+?[\d\s()./-]{7,}$').hasMatch(candidata) &&
                 !RegExp(r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama|foto)\b', caseSensitive: false).hasMatch(candidata) &&
                 !RegExp(r'\b(via|viale|piazza|corso|largo|vicolo|strada|traversa|lungomare|località|contrada)\b', caseSensitive: false).hasMatch(candidata) && candidata.length < 70) {
+              citta.text = candidata;
               paese.text = candidata;
               break;
             }
           }
         }
+      }
+
+      if (RegExp(r'\bItalia\b', caseSensitive: false).hasMatch(testo)) {
+        nazione.text = 'Italia';
       }
 
       final nomeParrocchia = parrocchia.text.trim().toLowerCase();
@@ -5585,6 +5609,26 @@ class _ClientiScreenState extends State<ClientiScreen> {
                       ? 'Inserisci il nome'
                       : null,
                 ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final nomeParrocchia = parrocchia.text.trim();
+                      if (nomeParrocchia.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Inserisci prima il nome della parrocchia')),
+                        );
+                        return;
+                      }
+                      final query = 'parroco della parrocchia "$nomeParrocchia" ${citta.text.trim()} ${nazione.text.trim()}';
+                      final uri = Uri.https('www.google.com', '/search', {'q': query});
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    },
+                    icon: const Icon(Icons.person_search_outlined),
+                    label: const Text('Cerca automaticamente il parroco'),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: parrocchia,
@@ -5596,11 +5640,20 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: paese,
+                  controller: citta,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
-                    labelText: 'Comune / Città',
+                    labelText: 'Città / Comune',
                     prefixIcon: Icon(Icons.location_city_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: nazione,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Paese / Nazione',
+                    prefixIcon: Icon(Icons.public),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -5709,7 +5762,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          paese: paese.text.trim(),
+                          paese: citta.text.trim(),
+                          citta: citta.text.trim(),
+                          nazione: nazione.text.trim(),
                           cap: capDaSalvare,
                           appuntamento: appuntamento,
                         );
@@ -5724,7 +5779,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          paese: paese.text.trim(),
+                          paese: citta.text.trim(),
+                          citta: citta.text.trim(),
+                          nazione: nazione.text.trim(),
                           cap: capDaSalvare,
                           appuntamento: appuntamento,
                         );
@@ -5770,6 +5827,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
     codiceFiscale.dispose();
     parrocchia.dispose();
     paese.dispose();
+    citta.dispose();
+    nazione.dispose();
     cap.dispose();
   }
 
