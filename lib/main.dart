@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
@@ -5333,7 +5332,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['parrocchia'] ?? '');
     final paese = TextEditingController(text: cliente?['paese'] ?? '');
     final cap = TextEditingController(text: cliente?['cap'] ?? '');
-    bool ricercaIndirizzo = false;
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
     if (appuntamento.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
@@ -5444,11 +5442,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: ricercaIndirizzo ? null : cercaIndirizzo,
-                    icon: ricercaIndirizzo
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.search),
-                    label: Text(ricercaIndirizzo ? 'Ricerca in corso...' : 'Cerca parrocchia su Google Maps'),
+                    onPressed: cercaIndirizzo,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Cerca parrocchia su Google Maps'),
                   ),
                 ),
                 const SizedBox(height: 12),
