@@ -43,3 +43,7 @@ flutter_launcher_icons:
   ios: false
   image_path: assets/app_icon.png
   min_sdk_android: 21
+
+# Allinea archive alla versione richiesta dal decoder PNG di image 4.11.x.
+dependency_overrides:
+  archive: ^4.0.10
