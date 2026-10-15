@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
@@ -284,7 +286,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 14,
+      version: 15,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -296,6 +298,8 @@ CREATE TABLE clienti (
   partita_iva TEXT,
   codice_fiscale TEXT,
   parrocchia TEXT,
+  paese TEXT,
+  cap TEXT,
   appuntamento TEXT
 )
 ''');
@@ -369,6 +373,10 @@ CREATE TABLE schede_parrocchie (
 ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 15) {
+          await db.execute("ALTER TABLE clienti ADD COLUMN paese TEXT");
+          await db.execute("ALTER TABLE clienti ADD COLUMN cap TEXT");
+        }
         if (oldVersion < 2) {
           await db.execute(
             "ALTER TABLE preventivi ADD COLUMN articoli TEXT NOT NULL DEFAULT '[]'",
@@ -579,6 +587,8 @@ CREATE TABLE schede_parrocchie (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
+    String paese = '',
+    String cap = '',
     String? appuntamento,
   }) async {
     final id = await (await database).insert('clienti', {
@@ -589,6 +599,8 @@ CREATE TABLE schede_parrocchie (
       'partita_iva': partitaIva,
       'codice_fiscale': codiceFiscale,
       'parrocchia': parrocchia,
+      'paese': paese,
+      'cap': cap,
       'appuntamento': appuntamento,
     });
     await autoBackup();
@@ -604,6 +616,8 @@ CREATE TABLE schede_parrocchie (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
+    String paese = '',
+    String cap = '',
     String? appuntamento,
   }) async {
     final result = await (await database).update(
@@ -616,6 +630,8 @@ CREATE TABLE schede_parrocchie (
         'partita_iva': partitaIva,
         'codice_fiscale': codiceFiscale,
         'parrocchia': parrocchia,
+        'paese': paese,
+        'cap': cap,
         'appuntamento': appuntamento,
       },
       where: 'id = ?',
@@ -5316,10 +5332,72 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['codice_fiscale'] ?? '');
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
+    final paese = TextEditingController(text: cliente?['paese'] ?? '');
+    final cap = TextEditingController(text: cliente?['cap'] ?? '');
+    bool ricercaIndirizzo = false;
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
     if (appuntamento.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
 
+    Future<void> cercaIndirizzo() async {
+      if (parrocchia.text.trim().isEmpty || paese.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Inserisci prima parrocchia e paese')),
+        );
+        return;
+      }
+      setModalState(() => ricercaIndirizzo = true);
+      try {
+        final query = '${parrocchia.text.trim()}, ${paese.text.trim()}, Italia';
+        final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+          'q': query,
+          'format': 'jsonv2',
+          'addressdetails': '1',
+          'limit': '5',
+          'countrycodes': 'it',
+        });
+        final response = await http.get(uri, headers: {
+          'User-Agent': 'PreventiviApp/1.1 (address lookup)',
+          'Accept-Language': 'it',
+        }).timeout(const Duration(seconds: 12));
+        if (response.statusCode != 200) {
+          throw Exception('Servizio non disponibile');
+        }
+        final results = jsonDecode(response.body) as List;
+        if (results.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Nessun indirizzo trovato. Controlla il nome della parrocchia e il paese.')),
+            );
+          }
+          return;
+        }
+        final result = Map<String, dynamic>.from(results.first as Map);
+        final address = Map<String, dynamic>.from(result['address'] as Map? ?? {});
+        final street = [
+          address['road'],
+          address['house_number'],
+        ].where((v) => v != null && v.toString().trim().isNotEmpty).join(' ');
+        final postalCode = (address['postcode'] ?? '').toString();
+        if (street.isNotEmpty) indirizzo.text = street;
+        if (postalCode.isNotEmpty) cap.text = postalCode;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(street.isNotEmpty || postalCode.isNotEmpty
+              ? 'Indirizzo e CAP aggiornati: verifica sempre i dati.'
+              : 'Trovata la parrocchia, ma indirizzo o CAP non disponibili.')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Errore nella ricerca online. Verifica la connessione e riprova.')),
+          );
+        }
+      } finally {
+        if (ctx.mounted) setModalState(() => ricercaIndirizzo = false);
+      }
+    }
 
     await showModalBottomSheet(
       context: context,
@@ -5369,6 +5447,26 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
+                  controller: paese,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Paese / Comune',
+                    prefixIcon: Icon(Icons.location_city_outlined),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: ricercaIndirizzo ? null : cercaIndirizzo,
+                    icon: ricercaIndirizzo
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.search),
+                    label: Text(ricercaIndirizzo ? 'Ricerca in corso...' : 'Cerca automaticamente indirizzo e CAP'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
                   controller: telefono,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
@@ -5392,6 +5490,15 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Indirizzo',
                     prefixIcon: Icon(Icons.location_on_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: cap,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'CAP',
+                    prefixIcon: Icon(Icons.markunread_mailbox_outlined),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -5430,6 +5537,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
+                          paese: paese.text.trim(),
+                          cap: cap.text.trim(),
                           appuntamento: appuntamento,
                         );
                       } else {
@@ -5443,6 +5552,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
+                          paese: paese.text.trim(),
+                          cap: cap.text.trim(),
                           appuntamento: appuntamento,
                         );
                       }
