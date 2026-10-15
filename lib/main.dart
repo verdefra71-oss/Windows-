@@ -5322,8 +5322,14 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final telefono =
         TextEditingController(text: cliente?['telefono'] ?? '');
     final email = TextEditingController(text: cliente?['email'] ?? '');
-    final indirizzo =
-        TextEditingController(text: cliente?['indirizzo'] ?? '');
+    final capIniziale = (cliente?['cap'] ?? '').toString().trim();
+    final indirizzoIniziale = (cliente?['indirizzo'] ?? '').toString().trim();
+    final indirizzo = TextEditingController(
+      text: indirizzoIniziale.isEmpty || capIniziale.isEmpty ||
+              RegExp(r'\b\d{5}\b').hasMatch(indirizzoIniziale)
+          ? indirizzoIniziale
+          : '$indirizzoIniziale, $capIniziale',
+    );
     final partitaIva =
         TextEditingController(text: cliente?['partita_iva'] ?? '');
     final codiceFiscale =
@@ -5331,7 +5337,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
     final paese = TextEditingController(text: cliente?['paese'] ?? '');
-    final cap = TextEditingController(text: cliente?['cap'] ?? '');
+    final cap = TextEditingController(text: capIniziale);
     final datiGoogleMaps = TextEditingController();
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
     if (appuntamento.isEmpty) appuntamento = null;
@@ -5401,6 +5407,14 @@ class _ClientiScreenState extends State<ClientiScreen> {
           .toList();
 
       final capRegex = RegExp(r'\b\d{5}\b');
+      // Estrae email e numeri di telefono dal testo copiato, se presenti.
+      final emailMatch = RegExp(r'[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}', caseSensitive: false).firstMatch(testo);
+      if (emailMatch != null) email.text = emailMatch.group(0)!.trim();
+      final telefonoMatch = RegExp(r'(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,4}\d{3,4}').allMatches(testo)
+          .map((m) => m.group(0)!.trim())
+          .firstWhere((v) => v.replaceAll(RegExp(r'\D'), '').length >= 8, orElse: () => '');
+      if (telefonoMatch.isNotEmpty) telefono.text = telefonoMatch;
+
       String? capTrovato;
       String? rigaCap;
       for (final riga in righe) {
@@ -5491,7 +5505,12 @@ class _ClientiScreenState extends State<ClientiScreen> {
       }
 
       if (indirizzoTrovato != null && indirizzoTrovato.isNotEmpty) {
-        indirizzo.text = indirizzoTrovato;
+        indirizzo.text = capTrovato == null
+            ? indirizzoTrovato
+            : '$indirizzoTrovato, $capTrovato';
+      } else if (capTrovato != null && indirizzo.text.trim().isNotEmpty &&
+          !capRegex.hasMatch(indirizzo.text)) {
+        indirizzo.text = '${indirizzo.text.trim()}, $capTrovato';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -5613,17 +5632,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   controller: indirizzo,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
-                    labelText: 'Indirizzo',
+                    labelText: 'Indirizzo e CAP',
                     prefixIcon: Icon(Icons.location_on_outlined),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: cap,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'CAP',
-                    prefixIcon: Icon(Icons.markunread_mailbox_outlined),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -5652,18 +5662,28 @@ class _ClientiScreenState extends State<ClientiScreen> {
                     onPressed: () async {
                       if (!key.currentState!.validate()) return;
 
+                      final indirizzoCompleto = indirizzo.text.trim();
+                      final matchCapIndirizzo = RegExp(r'\b\d{5}\b').firstMatch(indirizzoCompleto);
+                      final capDaSalvare = matchCapIndirizzo?.group(0) ?? cap.text.trim();
+                      final indirizzoDaSalvare = matchCapIndirizzo == null
+                          ? indirizzoCompleto
+                          : (indirizzoCompleto.substring(0, matchCapIndirizzo.start) +
+                                  indirizzoCompleto.substring(matchCapIndirizzo.end))
+                              .replaceAll(RegExp(r'^[,;\s]+|[,;\s]+$'), '')
+                              .replaceAll(RegExp(r'\s{2,}'), ' ')
+                              .trim();
                       int clienteId;
                       if (cliente == null) {
                         clienteId = await DatabaseHelper.instance.insertCliente(
                           nome: nome.text.trim(),
                           telefono: telefono.text.trim(),
                           email: email.text.trim(),
-                          indirizzo: indirizzo.text.trim(),
+                          indirizzo: indirizzoDaSalvare,
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
                           paese: paese.text.trim(),
-                          cap: cap.text.trim(),
+                          cap: capDaSalvare,
                           appuntamento: appuntamento,
                         );
                       } else {
@@ -5673,12 +5693,12 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           nome: nome.text.trim(),
                           telefono: telefono.text.trim(),
                           email: email.text.trim(),
-                          indirizzo: indirizzo.text.trim(),
+                          indirizzo: indirizzoDaSalvare,
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
                           paese: paese.text.trim(),
-                          cap: cap.text.trim(),
+                          cap: capDaSalvare,
                           appuntamento: appuntamento,
                         );
                       }
