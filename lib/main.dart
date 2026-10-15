@@ -5346,7 +5346,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
         );
         return;
       }
-      setModalState(() => ricercaIndirizzo = true);
+      if (mounted) setState(() => ricercaIndirizzo = true);
       try {
         final query = '${parrocchia.text.trim()}, ${paese.text.trim()}, Italia';
         final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
@@ -5395,7 +5395,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
           );
         }
       } finally {
-        if (ctx.mounted) setModalState(() => ricercaIndirizzo = false);
+        if (mounted) setState(() => ricercaIndirizzo = false);
       }
     }
 
@@ -5590,6 +5590,8 @@ class _ClientiScreenState extends State<ClientiScreen> {
     partitaIva.dispose();
     codiceFiscale.dispose();
     parrocchia.dispose();
+    paese.dispose();
+    cap.dispose();
   }
 
   Future<void> _apriSchedaParrocchia(Map<String, dynamic> c) async {
