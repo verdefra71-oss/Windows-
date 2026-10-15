@@ -5426,32 +5426,73 @@ class _ClientiScreenState extends State<ClientiScreen> {
       }
 
       final nomeParrocchia = parrocchia.text.trim().toLowerCase();
-      final righeIndirizzo = righe.where((riga) {
-        final lower = riga.toLowerCase();
-        if (lower == nomeParrocchia || lower.contains('@')) return false;
-        if (RegExp(r'^\+?[\d\s()./-]{7,}$').hasMatch(riga)) return false;
-        if (RegExp(r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama)\b', caseSensitive: false).hasMatch(riga)) return false;
-        if (capRegex.hasMatch(riga)) return false;
-        return RegExp(r'\b(via|viale|piazza|corso|largo|vicolo|strada|traversa|lungomare|località|contrada|p\.zza|p\.za)\b', caseSensitive: false)
-            .hasMatch(riga);
-      }).toList();
+      final descrizioni = RegExp(
+        r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama|come arrivare|foto|menu)\b',
+        caseSensitive: false,
+      );
+      final telefoni = RegExp(r'^\+?[\d\s()./-]{7,}$');
+      final vie = RegExp(
+        r'\b(via|viale|piazza|corso|largo|vicolo|strada|traversa|lungomare|località|contrada|p\.zza|p\.za|v\.le|v\.|p\.za)\b',
+        caseSensitive: false,
+      );
 
-      if (righeIndirizzo.isNotEmpty) {
-        indirizzo.text = righeIndirizzo.first;
-      } else {
-        // Se non è riconoscibile una via, usa una riga non descrittiva come suggerimento.
-        final candidate = righe.where((riga) {
-          final lower = riga.toLowerCase();
-          return lower != nomeParrocchia &&
-              !capRegex.hasMatch(riga) &&
-              !RegExp(r'^\+?[\d\s()./-]{7,}$').hasMatch(riga) &&
-              !RegExp(r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama)\b', caseSensitive: false).hasMatch(riga);
-        }).toList();
-        if (candidate.isNotEmpty && indirizzo.text.trim().isEmpty) {
-          indirizzo.text = candidate.first;
+      String? indirizzoTrovato;
+
+      // Google Maps spesso mette via, CAP e comune sulla stessa riga:
+      // es. "Via Roma, 80022 Arzano NA". Estrae la parte prima del CAP.
+      for (final riga in righe) {
+        if (capRegex.hasMatch(riga)) {
+          final primaDelCap = riga.substring(0, capRegex.firstMatch(riga)!.start)
+              .replaceAll(RegExp(r'[,;\\-]+$'), '')
+              .trim();
+          if (primaDelCap.isNotEmpty &&
+              primaDelCap.toLowerCase() != nomeParrocchia &&
+              vie.hasMatch(primaDelCap)) {
+            indirizzoTrovato = primaDelCap;
+            break;
+          }
         }
       }
 
+      // Altrimenti cerca una riga autonoma con indicazione stradale.
+      if (indirizzoTrovato == null) {
+        for (final riga in righe) {
+          final lower = riga.toLowerCase();
+          if (lower == nomeParrocchia ||
+              lower.contains('@') ||
+              capRegex.hasMatch(riga) ||
+              telefoni.hasMatch(riga) ||
+              descrizioni.hasMatch(riga)) {
+            continue;
+          }
+          if (vie.hasMatch(riga)) {
+            indirizzoTrovato = riga
+                .replaceAll(RegExp(r'\s{2,}'), ' ')
+                .trim();
+            break;
+          }
+        }
+      }
+
+      // Ultimo tentativo: estrai una via da testo incollato tutto su una riga.
+      if (indirizzoTrovato == null) {
+        final testoCompatto = righe.join(', ');
+        final matchVia = RegExp(
+          r'((?:Via|Viale|Piazza|Corso|Largo|Vicolo|Strada|Traversa|Lungomare|Contrada|Località|V\.le|P\.zza|P\.za)\s+[^,\n]+)',
+          caseSensitive: false,
+        ).firstMatch(testoCompatto);
+        if (matchVia != null) {
+          indirizzoTrovato = matchVia.group(1)?.trim();
+          indirizzoTrovato = indirizzoTrovato
+              ?.replaceFirst(capRegex, '')
+              .replaceAll(RegExp(r'\s+\b[A-Z]{2}\b$'), '')
+              .trim();
+        }
+      }
+
+      if (indirizzoTrovato != null && indirizzoTrovato.isNotEmpty) {
+        indirizzo.text = indirizzoTrovato;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(capTrovato != null
