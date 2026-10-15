@@ -5340,6 +5340,36 @@ class _ClientiScreenState extends State<ClientiScreen> {
     if (appuntamento.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
 
+    Future<void> cercaParroco() async {
+      final nomeParrocchia = parrocchia.text.trim().isNotEmpty
+          ? parrocchia.text.trim()
+          : nome.text.trim();
+      if (nomeParrocchia.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Inserisci il nome della parrocchia o della chiesa')),
+        );
+        return;
+      }
+      final localita = paese.text.trim();
+      final query = 'parroco della parrocchia $nomeParrocchia'
+          '${localita.isNotEmpty ? ' $localita' : ''}';
+      final uri = Uri.https('www.google.com', '/search', {'q': query});
+      try {
+        final aperto = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!aperto && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Impossibile aprire la ricerca del parroco')),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Errore nell’apertura della ricerca del parroco')),
+          );
+        }
+      }
+    }
+
     Future<void> cercaIndirizzo() async {
       final nome = parrocchia.text.trim();
       if (nome.isEmpty) {
@@ -5575,9 +5605,14 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 TextFormField(
                   controller: nome,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Nome / Ragione Sociale',
-                    prefixIcon: Icon(Icons.person),
+                    prefixIcon: const Icon(Icons.person),
+                    suffixIcon: IconButton(
+                      tooltip: 'Cerca automaticamente il parroco',
+                      icon: const Icon(Icons.manage_search),
+                      onPressed: cercaParroco,
+                    ),
                   ),
                   validator: (v) => v == null || v.trim().isEmpty
                       ? 'Inserisci il nome'
