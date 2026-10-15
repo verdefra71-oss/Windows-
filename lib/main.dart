@@ -284,7 +284,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 16,
+      version: 15,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -297,8 +297,6 @@ CREATE TABLE clienti (
   codice_fiscale TEXT,
   parrocchia TEXT,
   paese TEXT,
-  citta TEXT,
-  nazione TEXT,
   cap TEXT,
   appuntamento TEXT
 )
@@ -373,19 +371,10 @@ CREATE TABLE schede_parrocchie (
 ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        // Migrazione tollerante: alcune versioni precedenti potrebbero aver
-        // già creato una delle colonne, anche con un numero versione più basso.
-        Future<void> aggiungiColonnaSeManca(String tabella, String colonna, String definizione) async {
-          final colonne = await db.rawQuery('PRAGMA table_info($tabella)');
-          final presente = colonne.any((r) => (r['name'] as String?) == colonna);
-          if (!presente) {
-            await db.execute('ALTER TABLE $tabella ADD COLUMN $colonna $definizione');
-          }
+        if (oldVersion < 15) {
+          await db.execute("ALTER TABLE clienti ADD COLUMN paese TEXT");
+          await db.execute("ALTER TABLE clienti ADD COLUMN cap TEXT");
         }
-        await aggiungiColonnaSeManca('clienti', 'paese', 'TEXT');
-        await aggiungiColonnaSeManca('clienti', 'cap', 'TEXT');
-        await aggiungiColonnaSeManca('clienti', 'citta', 'TEXT');
-        await aggiungiColonnaSeManca('clienti', 'nazione', 'TEXT');
         if (oldVersion < 2) {
           await db.execute(
             "ALTER TABLE preventivi ADD COLUMN articoli TEXT NOT NULL DEFAULT '[]'",
@@ -597,8 +586,6 @@ CREATE TABLE schede_parrocchie (
     String codiceFiscale = '',
     String parrocchia = '',
     String paese = '',
-    String citta = '',
-    String nazione = 'Italia',
     String cap = '',
     String? appuntamento,
   }) async {
@@ -611,8 +598,6 @@ CREATE TABLE schede_parrocchie (
       'codice_fiscale': codiceFiscale,
       'parrocchia': parrocchia,
       'paese': paese,
-      'citta': citta,
-      'nazione': nazione,
       'cap': cap,
       'appuntamento': appuntamento,
     });
@@ -630,8 +615,6 @@ CREATE TABLE schede_parrocchie (
     String codiceFiscale = '',
     String parrocchia = '',
     String paese = '',
-    String citta = '',
-    String nazione = 'Italia',
     String cap = '',
     String? appuntamento,
   }) async {
@@ -646,8 +629,6 @@ CREATE TABLE schede_parrocchie (
         'codice_fiscale': codiceFiscale,
         'parrocchia': parrocchia,
         'paese': paese,
-        'citta': citta,
-        'nazione': nazione,
         'cap': cap,
         'appuntamento': appuntamento,
       },
@@ -5341,13 +5322,11 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final telefono =
         TextEditingController(text: cliente?['telefono'] ?? '');
     final email = TextEditingController(text: cliente?['email'] ?? '');
-    final capIniziale = (cliente?['cap'] ?? '').toString().trim();
-    final indirizzoIniziale = (cliente?['indirizzo'] ?? '').toString().trim();
+    final indirizzoEsistente = (cliente?['indirizzo'] ?? '').toString().trim();
+    final capEsistente = (cliente?['cap'] ?? '').toString().trim();
     final indirizzo = TextEditingController(
-      text: indirizzoIniziale.isEmpty || capIniziale.isEmpty ||
-              RegExp(r'\b\d{5}\b').hasMatch(indirizzoIniziale)
-          ? indirizzoIniziale
-          : '$indirizzoIniziale, $capIniziale',
+      text: [indirizzoEsistente, if (capEsistente.isNotEmpty && !indirizzoEsistente.contains(capEsistente)) capEsistente]
+          .where((v) => v.isNotEmpty).join(', '),
     );
     final partitaIva =
         TextEditingController(text: cliente?['partita_iva'] ?? '');
@@ -5355,10 +5334,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['codice_fiscale'] ?? '');
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
-    final paese = TextEditingController(text: cliente?['paese'] ?? cliente?['citta'] ?? '');
-    final citta = TextEditingController(text: cliente?['citta'] ?? cliente?['paese'] ?? '');
-    final nazione = TextEditingController(text: cliente?['nazione'] ?? 'Italia');
-    final cap = TextEditingController(text: capIniziale);
+    final paese = TextEditingController(text: cliente?['paese'] ?? '');
     final datiGoogleMaps = TextEditingController();
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
     if (appuntamento.isEmpty) appuntamento = null;
@@ -5428,14 +5404,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
           .toList();
 
       final capRegex = RegExp(r'\b\d{5}\b');
-      // Estrae email e numeri di telefono dal testo copiato, se presenti.
-      final emailMatch = RegExp(r'[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}', caseSensitive: false).firstMatch(testo);
-      if (emailMatch != null) email.text = emailMatch.group(0)!.trim();
-      final telefonoMatch = RegExp(r'(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,4}\d{3,4}').allMatches(testo)
-          .map((m) => m.group(0)!.trim())
-          .firstWhere((v) => v.replaceAll(RegExp(r'\D'), '').length >= 8, orElse: () => '');
-      if (telefonoMatch.isNotEmpty) telefono.text = telefonoMatch;
-
       String? capTrovato;
       String? rigaCap;
       for (final riga in righe) {
@@ -5448,45 +5416,15 @@ class _ClientiScreenState extends State<ClientiScreen> {
       }
 
       if (capTrovato != null) {
-        cap.text = capTrovato;
         // Una riga del tipo "80022 Arzano NA" consente anche di ricavare il comune.
-        // Dopo il CAP Google Maps riporta normalmente comune/provincia/paese.
-        // Preferiamo la parte successiva al CAP, evitando di copiare la via nel comune.
-        final matchCapRiga = capRegex.firstMatch(rigaCap!);
-        final dopoCap = matchCapRiga == null
-            ? ''
-            : rigaCap.substring(matchCapRiga.end);
-        var comune = dopoCap
+        final comune = rigaCap!
+            .replaceFirst(capRegex, '')
             .replaceAll(RegExp(r'\b[A-Z]{2}\b'), '')
-            .replaceAll(RegExp(r'[,;()]'), ' ')
-            .replaceAll(RegExp(r'\s{2,}'), ' ')
+            .replaceAll(RegExp(r'[,()]'), ' ')
             .trim();
-        if (RegExp(r'\bItalia\b', caseSensitive: false).hasMatch(comune)) {
-          nazione.text = 'Italia';
-          comune = comune.replaceAll(RegExp(r'\bItalia\b', caseSensitive: false), '').trim();
+        if (comune.isNotEmpty && paese.text.trim().isEmpty) {
+          paese.text = comune;
         }
-        if (comune.isNotEmpty) {
-          citta.text = comune;
-          paese.text = comune; // compatibilità con le versioni precedenti
-        } else if (citta.text.trim().isEmpty) {
-          // Fallback per risultati Maps in cui il comune è su una riga separata.
-          for (final riga in righe.reversed) {
-            final candidata = riga.replaceAll(RegExp(r'[,()]'), ' ').trim();
-            if (candidata.isNotEmpty && candidata != rigaCap &&
-                !candidata.contains('@') && !capRegex.hasMatch(candidata) &&
-                !RegExp(r'^\+?[\d\s()./-]{7,}$').hasMatch(candidata) &&
-                !RegExp(r'\b(aperto|chiuso|orari|recensioni|stelle|sito web|indicazioni|chiama|foto)\b', caseSensitive: false).hasMatch(candidata) &&
-                !RegExp(r'\b(via|viale|piazza|corso|largo|vicolo|strada|traversa|lungomare|località|contrada)\b', caseSensitive: false).hasMatch(candidata) && candidata.length < 70) {
-              citta.text = candidata;
-              paese.text = candidata;
-              break;
-            }
-          }
-        }
-      }
-
-      if (RegExp(r'\bItalia\b', caseSensitive: false).hasMatch(testo)) {
-        nazione.text = 'Italia';
       }
 
       final nomeParrocchia = parrocchia.text.trim().toLowerCase();
@@ -5555,11 +5493,10 @@ class _ClientiScreenState extends State<ClientiScreen> {
       }
 
       if (indirizzoTrovato != null && indirizzoTrovato.isNotEmpty) {
-        indirizzo.text = capTrovato == null
-            ? indirizzoTrovato
-            : '$indirizzoTrovato, $capTrovato';
+        indirizzo.text = [indirizzoTrovato, if (capTrovato != null) capTrovato]
+            .where((v) => v.isNotEmpty).join(', ');
       } else if (capTrovato != null && indirizzo.text.trim().isNotEmpty &&
-          !capRegex.hasMatch(indirizzo.text)) {
+          !indirizzo.text.contains(capTrovato)) {
         indirizzo.text = '${indirizzo.text.trim()}, $capTrovato';
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5609,26 +5546,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                       ? 'Inserisci il nome'
                       : null,
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final nomeParrocchia = parrocchia.text.trim();
-                      if (nomeParrocchia.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Inserisci prima il nome della parrocchia')),
-                        );
-                        return;
-                      }
-                      final query = 'parroco della parrocchia "$nomeParrocchia" ${citta.text.trim()} ${nazione.text.trim()}';
-                      final uri = Uri.https('www.google.com', '/search', {'q': query});
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    },
-                    icon: const Icon(Icons.person_search_outlined),
-                    label: const Text('Cerca automaticamente il parroco'),
-                  ),
-                ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: parrocchia,
@@ -5640,20 +5557,11 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: citta,
+                  controller: paese,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
-                    labelText: 'Città / Comune',
+                    labelText: 'Paese / Comune',
                     prefixIcon: Icon(Icons.location_city_outlined),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: nazione,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Paese / Nazione',
-                    prefixIcon: Icon(Icons.public),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -5711,7 +5619,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   controller: indirizzo,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
-                    labelText: 'Indirizzo e CAP',
+                    labelText: 'Indirizzo',
                     prefixIcon: Icon(Icons.location_on_outlined),
                   ),
                 ),
@@ -5741,31 +5649,18 @@ class _ClientiScreenState extends State<ClientiScreen> {
                     onPressed: () async {
                       if (!key.currentState!.validate()) return;
 
-                      final indirizzoCompleto = indirizzo.text.trim();
-                      final matchCapIndirizzo = RegExp(r'\b\d{5}\b').firstMatch(indirizzoCompleto);
-                      final capDaSalvare = matchCapIndirizzo?.group(0) ?? cap.text.trim();
-                      final indirizzoDaSalvare = matchCapIndirizzo == null
-                          ? indirizzoCompleto
-                          : (indirizzoCompleto.substring(0, matchCapIndirizzo.start) +
-                                  indirizzoCompleto.substring(matchCapIndirizzo.end))
-                              .replaceAll(RegExp(r'^[,;\s]+|[,;\s]+$'), '')
-                              .replaceAll(RegExp(r'\s{2,}'), ' ')
-                              .trim();
-                      try {
                       int clienteId;
                       if (cliente == null) {
                         clienteId = await DatabaseHelper.instance.insertCliente(
                           nome: nome.text.trim(),
                           telefono: telefono.text.trim(),
                           email: email.text.trim(),
-                          indirizzo: indirizzoDaSalvare,
+                          indirizzo: indirizzo.text.trim(),
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          paese: citta.text.trim(),
-                          citta: citta.text.trim(),
-                          nazione: nazione.text.trim(),
-                          cap: capDaSalvare,
+                          paese: paese.text.trim(),
+                          cap: '',
                           appuntamento: appuntamento,
                         );
                       } else {
@@ -5775,14 +5670,12 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           nome: nome.text.trim(),
                           telefono: telefono.text.trim(),
                           email: email.text.trim(),
-                          indirizzo: indirizzoDaSalvare,
+                          indirizzo: indirizzo.text.trim(),
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          paese: citta.text.trim(),
-                          citta: citta.text.trim(),
-                          nazione: nazione.text.trim(),
-                          cap: capDaSalvare,
+                          paese: paese.text.trim(),
+                          cap: '',
                           appuntamento: appuntamento,
                         );
                       }
@@ -5795,13 +5688,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
 
                       if (ctx.mounted) Navigator.pop(ctx);
                       await _carica();
-                      } catch (e) {
-                        if (ctx.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Errore nel salvataggio del cliente: $e')),
-                          );
-                        }
-                      }
                     },
                     icon: const Icon(Icons.save),
                     label: Text(
@@ -5827,9 +5713,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
     codiceFiscale.dispose();
     parrocchia.dispose();
     paese.dispose();
-    citta.dispose();
-    nazione.dispose();
-    cap.dispose();
   }
 
   Future<void> _apriSchedaParrocchia(Map<String, dynamic> c) async {
