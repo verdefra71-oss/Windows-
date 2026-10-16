@@ -5355,7 +5355,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
     final paese = TextEditingController(text: cliente?['paese'] ?? '');
-    final datiGoogleMaps = TextEditingController();
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
     if (appuntamento.isEmpty) appuntamento = null;
     final key = GlobalKey<FormState>();
@@ -5438,11 +5437,11 @@ class _ClientiScreenState extends State<ClientiScreen> {
     }
 
 
-    void inserisciDatiDaGoogleMaps() {
-      final testo = datiGoogleMaps.text.trim();
+    void sistemaIndirizzoDaGoogleMaps() {
+      final testo = indirizzo.text.trim();
       if (testo.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Incolla prima le informazioni copiate da Google Maps')),
+          const SnackBar(content: Text('Incolla prima le informazioni di Google Maps nel campo Indirizzo')),
         );
         return;
       }
@@ -5667,29 +5666,6 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: datiGoogleMaps,
-                  minLines: 2,
-                  maxLines: 5,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    labelText: 'Informazioni copiate da Google Maps',
-                    hintText: 'Apri Google Maps, copia i dettagli della parrocchia e incollali qui',
-                    helperText: 'Poi premi “Inserisci dati nelle caselle”. Verifica sempre i dati.',
-                    prefixIcon: Icon(Icons.content_paste_search),
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: inserisciDatiDaGoogleMaps,
-                    icon: const Icon(Icons.content_paste_go),
-                    label: const Text('Inserisci dati nelle caselle'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
                   controller: telefono,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
@@ -5709,10 +5685,24 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: indirizzo,
+                  minLines: 1,
+                  maxLines: 4,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
                     labelText: 'Indirizzo',
+                    hintText: 'Incolla qui direttamente le informazioni copiate da Google Maps',
+                    helperText: 'Dopo aver incollato, premi “Sistema indirizzo” per separare via, CAP e comune.',
                     prefixIcon: Icon(Icons.location_on_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: sistemaIndirizzoDaGoogleMaps,
+                    icon: const Icon(Icons.auto_fix_high),
+                    label: const Text('Sistema indirizzo da Google Maps'),
                   ),
                 ),
                 const SizedBox(height: 12),
