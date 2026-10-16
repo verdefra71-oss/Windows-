@@ -5691,7 +5691,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Indirizzo',
                     hintText: 'Incolla qui direttamente le informazioni copiate da Google Maps',
-                    helperText: 'Dopo aver incollato, premi “Sistema indirizzo” per separare via, CAP e comune.',
+                    helperText: 'Copia le informazioni da Google Maps e premi il tasto sotto: verranno incollate e sistemate automaticamente.',
                     prefixIcon: Icon(Icons.location_on_outlined),
                     border: OutlineInputBorder(),
                   ),
@@ -5700,9 +5700,26 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: sistemaIndirizzoDaGoogleMaps,
+                    onPressed: () async {
+                      // Incolla gli appunti di Google Maps nel campo Indirizzo,
+                      // poi esegue la separazione di via, CAP e comune.
+                      final datiAppunti = await Clipboard.getData('text/plain');
+                      final testoCopiato = datiAppunti?.text?.trim();
+                      if (testoCopiato == null || testoCopiato.isEmpty) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Prima copia le informazioni da Google Maps, poi premi questo tasto.'),
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      indirizzo.text = testoCopiato;
+                      sistemaIndirizzoDaGoogleMaps();
+                    },
                     icon: const Icon(Icons.auto_fix_high),
-                    label: const Text('Sistema indirizzo da Google Maps'),
+                    label: const Text('Incolla e sistema da Google Maps'),
                   ),
                 ),
                 const SizedBox(height: 12),
