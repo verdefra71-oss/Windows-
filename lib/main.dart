@@ -284,7 +284,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 15,
+      version: 16,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -296,6 +296,7 @@ CREATE TABLE clienti (
   partita_iva TEXT,
   codice_fiscale TEXT,
   parrocchia TEXT,
+  tipo_struttura TEXT NOT NULL DEFAULT '',
   paese TEXT,
   cap TEXT,
   appuntamento TEXT
@@ -371,6 +372,9 @@ CREATE TABLE schede_parrocchie (
 ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 16) {
+          await db.execute("ALTER TABLE clienti ADD COLUMN tipo_struttura TEXT NOT NULL DEFAULT ''");
+        }
         if (oldVersion < 15) {
           await db.execute("ALTER TABLE clienti ADD COLUMN paese TEXT");
           await db.execute("ALTER TABLE clienti ADD COLUMN cap TEXT");
@@ -585,6 +589,7 @@ CREATE TABLE schede_parrocchie (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
+    String tipoStruttura = '',
     String paese = '',
     String cap = '',
     String? appuntamento,
@@ -597,6 +602,7 @@ CREATE TABLE schede_parrocchie (
       'partita_iva': partitaIva,
       'codice_fiscale': codiceFiscale,
       'parrocchia': parrocchia,
+      'tipo_struttura': tipoStruttura,
       'paese': paese,
       'cap': cap,
       'appuntamento': appuntamento,
@@ -614,6 +620,7 @@ CREATE TABLE schede_parrocchie (
     String partitaIva = '',
     String codiceFiscale = '',
     String parrocchia = '',
+    String tipoStruttura = '',
     String paese = '',
     String cap = '',
     String? appuntamento,
@@ -628,6 +635,7 @@ CREATE TABLE schede_parrocchie (
         'partita_iva': partitaIva,
         'codice_fiscale': codiceFiscale,
         'parrocchia': parrocchia,
+        'tipo_struttura': tipoStruttura,
         'paese': paese,
         'cap': cap,
         'appuntamento': appuntamento,
@@ -5354,6 +5362,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['codice_fiscale'] ?? '');
     final parrocchia =
         TextEditingController(text: cliente?['parrocchia'] ?? '');
+    String tipoStruttura = (cliente?['tipo_struttura'] ?? '').toString();
+    const tipiStruttura = ['', 'Parrocchia', 'Basilica', 'Chiesa', 'Istituto'];
+    if (!tipiStruttura.contains(tipoStruttura)) tipoStruttura = '';
     final paese = TextEditingController(text: cliente?['paese'] ?? '');
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
     if (appuntamento.isEmpty) appuntamento = null;
@@ -5482,12 +5493,25 @@ class _ClientiScreenState extends State<ClientiScreen> {
                       : null,
                 ),
                 const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: tipoStruttura,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo struttura',
+                    prefixIcon: Icon(Icons.church_outlined),
+                  ),
+                  items: tipiStruttura.map((tipo) => DropdownMenuItem<String>(
+                    value: tipo,
+                    child: Text(tipo.isEmpty ? '— Vuoto —' : tipo),
+                  )).toList(),
+                  onChanged: (value) => setModalState(() => tipoStruttura = value ?? ''),
+                ),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: parrocchia,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
-                    labelText: 'Parrocchia',
-                    prefixIcon: Icon(Icons.church_outlined),
+                    labelText: 'Nome parrocchia / struttura',
+                    prefixIcon: Icon(Icons.edit_outlined),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -5575,6 +5599,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
+                          tipoStruttura: tipoStruttura,
                           paese: paese.text.trim(),
                           cap: '',
                           appuntamento: appuntamento,
@@ -5590,6 +5615,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
+                          tipoStruttura: tipoStruttura,
                           paese: paese.text.trim(),
                           cap: '',
                           appuntamento: appuntamento,
