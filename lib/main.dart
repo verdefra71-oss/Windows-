@@ -2630,7 +2630,7 @@ Future<String?> selezionaCliente(BuildContext context) async {
                                 [
                                   filtrati[i]['telefono'],
                                   filtrati[i]['email'],
-                                  if ((filtrati[i]['parrocchia'] ?? '').toString().isNotEmpty) '${(filtrati[i]['tipo_struttura'] ?? '').toString().trim().isNotEmpty ? filtrati[i]['tipo_struttura'] : 'Struttura'}: ${filtrati[i]['parrocchia']}',
+                                  if ((filtrati[i]['parrocchia'] ?? '').toString().isNotEmpty) '${(filtrati[i]['tipo_struttura'] ?? '').toString().trim().isNotEmpty ? '${filtrati[i]['tipo_struttura']}: ' : ''}${filtrati[i]['parrocchia']}',
                                 ]
                                     .where((x) => (x ?? '').toString().isNotEmpty)
                                     .join(' • '),
