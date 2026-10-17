@@ -2630,7 +2630,7 @@ Future<String?> selezionaCliente(BuildContext context) async {
                                 [
                                   filtrati[i]['telefono'],
                                   filtrati[i]['email'],
-                                  if ((filtrati[i]['parrocchia'] ?? '').toString().isNotEmpty) 'Parrocchia: ${filtrati[i]['parrocchia']}',
+                                  if ((filtrati[i]['parrocchia'] ?? '').toString().isNotEmpty) '${(filtrati[i]['tipo_struttura'] ?? '').toString().trim().isNotEmpty ? filtrati[i]['tipo_struttura'] : 'Struttura'}: ${filtrati[i]['parrocchia']}',
                                 ]
                                     .where((x) => (x ?? '').toString().isNotEmpty)
                                     .join(' • '),
@@ -5850,7 +5850,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                       if ((c['indirizzo'] ?? '').toString().isNotEmpty)
                         c['indirizzo'],
                       if ((c['parrocchia'] ?? '').toString().isNotEmpty)
-                        'Parrocchia: ${c['parrocchia']}',
+                        '${(c['tipo_struttura'] ?? '').toString().trim().isNotEmpty ? c['tipo_struttura'] : 'Struttura'}: ${c['parrocchia']}',
                       if ((c['appuntamento'] ?? '').toString().trim().isNotEmpty)
                         'Appuntamento: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(c['appuntamento'].toString()))}',
                     ].join('\n');
