@@ -5364,6 +5364,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
         TextEditingController(text: cliente?['parrocchia'] ?? '');
     String tipoStruttura = (cliente?['tipo_struttura'] ?? '').toString();
     const tipiStruttura = ['', 'Parrocchia', 'Basilica', 'Chiesa', 'Istituto'];
+    final tipoPersonalizzato = TextEditingController(
+      text: tipiStruttura.contains(tipoStruttura) ? '' : tipoStruttura,
+    );
     if (!tipiStruttura.contains(tipoStruttura)) tipoStruttura = '';
     final paese = TextEditingController(text: cliente?['paese'] ?? '');
     String? appuntamento = (cliente?['appuntamento'] ?? '').toString().trim();
@@ -5505,6 +5508,18 @@ class _ClientiScreenState extends State<ClientiScreen> {
                   )).toList(),
                   onChanged: (value) => setModalState(() => tipoStruttura = value ?? ''),
                 ),
+                if (tipoStruttura.isEmpty) ...[
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: tipoPersonalizzato,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: 'Dicitura personalizzata (facoltativa)',
+                      hintText: 'Es. Santuario, Cappella, Convento...',
+                      prefixIcon: Icon(Icons.edit_note),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: parrocchia,
@@ -5599,7 +5614,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          tipoStruttura: tipoStruttura,
+                          tipoStruttura: tipoStruttura.isEmpty
+                              ? tipoPersonalizzato.text.trim()
+                              : tipoStruttura,
                           paese: paese.text.trim(),
                           cap: '',
                           appuntamento: appuntamento,
@@ -5615,7 +5632,9 @@ class _ClientiScreenState extends State<ClientiScreen> {
                           partitaIva: partitaIva.text.trim(),
                           codiceFiscale: codiceFiscale.text.trim(),
                           parrocchia: parrocchia.text.trim(),
-                          tipoStruttura: tipoStruttura,
+                          tipoStruttura: tipoStruttura.isEmpty
+                              ? tipoPersonalizzato.text.trim()
+                              : tipoStruttura,
                           paese: paese.text.trim(),
                           cap: '',
                           appuntamento: appuntamento,
@@ -5654,6 +5673,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
     partitaIva.dispose();
     codiceFiscale.dispose();
     parrocchia.dispose();
+    tipoPersonalizzato.dispose();
     paese.dispose();
   }
 
