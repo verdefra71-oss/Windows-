@@ -1117,6 +1117,7 @@ class PdfGenerator {
     final partitaIva = value('partita_iva');
     final codiceFiscale = value('codice_fiscale');
     final parrocchia = value('parrocchia');
+    final tipoStruttura = value('tipo_struttura');
 
     final clientRows = <pw.Widget>[
       pw.Text(
@@ -1137,7 +1138,7 @@ class PdfGenerator {
       if (email.isNotEmpty) pw.Text('Email: $email'),
       if (partitaIva.isNotEmpty) pw.Text('Partita IVA: $partitaIva'),
       if (codiceFiscale.isNotEmpty) pw.Text('Codice Fiscale: $codiceFiscale'),
-      if (parrocchia.isNotEmpty) pw.Text('Parrocchia: $parrocchia'),
+      if (parrocchia.isNotEmpty) pw.Text('${tipoStruttura.isNotEmpty ? '$tipoStruttura: ' : ''}$parrocchia'),
     ];
 
     pdf.addPage(
@@ -1459,7 +1460,7 @@ class PdfGenerator {
           pw.Text('DATI DESTINATARIO', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: gold)),
           pw.SizedBox(height: 5),
           if (value('parrocchia').isNotEmpty)
-            pw.Text('Parrocchia: ${value('parrocchia')}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.Text('${value('tipo_struttura').isNotEmpty ? '${value('tipo_struttura')}: ' : ''}${value('parrocchia')}', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
           if (value('indirizzo').isNotEmpty) pw.Text('Indirizzo: ${value('indirizzo')}'),
           if (value('telefono').isNotEmpty) pw.Text('Telefono: ${value('telefono')}'),
           if (value('email').isNotEmpty) pw.Text('Email: ${value('email')}'),
