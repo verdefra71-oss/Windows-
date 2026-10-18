@@ -2339,22 +2339,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Row(
                       children: [
                         Expanded(
+                          flex: 5,
                           child: SizedBox(
-                            height: compact ? 102 : 126,
+                            height: compact ? 150 : 190,
                             child: Image.asset(
                               'assets/logo_home_bts.png',
                               fit: BoxFit.contain,
-                              alignment: Alignment.centerLeft,
+                              alignment: Alignment.center,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 18),
+                        const SizedBox(width: 12),
                         Container(
                           width: 1,
-                          height: compact ? 72 : 92,
+                          height: compact ? 100 : 130,
                           color: _gold.withValues(alpha: .45),
                         ),
-                        const SizedBox(width: 22),
+                        const SizedBox(width: 16),
                         const Flexible(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
