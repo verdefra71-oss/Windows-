@@ -2342,7 +2342,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: SizedBox(
                             height: compact ? 102 : 126,
                             child: Image.asset(
-                              'assets/logo.png',
+                              'assets/logo_home_bts.png',
                               fit: BoxFit.contain,
                               alignment: Alignment.centerLeft,
                             ),
