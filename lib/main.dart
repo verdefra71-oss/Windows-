@@ -2339,24 +2339,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Row(
                       children: [
                         Expanded(
-                          flex: 5,
+                          flex: 1,
                           child: SizedBox(
-                            height: compact ? 150 : 190,
-                            child: Image.asset(
-                              'assets/logo_home_bts.png',
-                              fit: BoxFit.contain,
-                              alignment: Alignment.center,
+                            height: compact ? 88 : 112,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Image.asset(
+                                'assets/logo_home_bts.png',
+                                fit: BoxFit.contain,
+                                alignment: Alignment.center,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Container(
                           width: 1,
-                          height: compact ? 100 : 130,
+                          height: compact ? 78 : 96,
                           color: _gold.withValues(alpha: .45),
                         ),
-                        const SizedBox(width: 16),
-                        const Flexible(
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          flex: 1,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -2365,9 +2369,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 'GESTIONE PREVENTIVI',
                                 style: TextStyle(
                                   color: _darkGold,
-                                  fontSize: 19,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.2,
+                                  letterSpacing: 0.6,
                                 ),
                               ),
                               SizedBox(height: 7),
@@ -2375,8 +2379,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 'Tutto il tuo lavoro,\nsemplice e ordinato.',
                                 style: TextStyle(
                                   color: Color(0xFF514644),
-                                  fontSize: 16,
-                                  height: 1.25,
+                                  fontSize: 14,
+                                  height: 1.2,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
