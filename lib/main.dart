@@ -284,7 +284,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 17,
+      version: 18,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -382,6 +382,14 @@ CREATE TABLE schede_parrocchie (
           data TEXT NOT NULL, tipo_intervento TEXT NOT NULL,
           campane_numero INTEGER NOT NULL DEFAULT 0, campane_programmatore TEXT,
           campane_specifiche_impianto TEXT, campane_note TEXT
+        )''');
+        await db.execute('''CREATE TABLE schede_intervento_costi (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL,
+          data TEXT NOT NULL, km_andata REAL NOT NULL DEFAULT 0,
+          gasolio_litro REAL NOT NULL DEFAULT 0, consumo_litri_100km REAL NOT NULL DEFAULT 0,
+          intervento TEXT NOT NULL, ricambi TEXT NOT NULL DEFAULT '[]',
+          ore_lavoro REAL NOT NULL DEFAULT 0, tecnici INTEGER NOT NULL DEFAULT 1,
+          costo_orario_tecnico REAL NOT NULL DEFAULT 0
         )''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -487,6 +495,9 @@ CREATE TABLE schede_parrocchie (
             await db.insert('interventi_audio', {'cliente_id': cid, 'data': oggi, 'tipo_intervento': 'Storico scheda esistente', 'audio_diffusori_numero': row['audio_diffusori_numero'] ?? 0, 'audio_diffusori_marca': row['audio_diffusori_marca'], 'audio_amplificatore_marca': row['audio_amplificatore_marca'], 'audio_microfoni_numero': row['audio_microfoni_numero'] ?? 0, 'audio_microfoni_marca': row['audio_microfoni_marca'], 'audio_qualita': row['audio_qualita'], 'audio_note': row['audio_note']});
             await db.insert('interventi_campane', {'cliente_id': cid, 'data': oggi, 'tipo_intervento': 'Storico scheda esistente', 'campane_numero': row['campane_numero'] ?? 0, 'campane_programmatore': row['campane_programmatore'], 'campane_specifiche_impianto': row['campane_specifiche_impianto'], 'campane_note': row['campane_note']});
           }
+        }
+        if (oldVersion < 18) {
+          await db.execute("CREATE TABLE schede_intervento_costi (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, km_andata REAL NOT NULL DEFAULT 0, gasolio_litro REAL NOT NULL DEFAULT 0, consumo_litri_100km REAL NOT NULL DEFAULT 0, intervento TEXT NOT NULL, ricambi TEXT NOT NULL DEFAULT '[]', ore_lavoro REAL NOT NULL DEFAULT 0, tecnici INTEGER NOT NULL DEFAULT 1, costo_orario_tecnico REAL NOT NULL DEFAULT 0)");
         }
       },
     );
@@ -870,6 +881,7 @@ CREATE TABLE schede_parrocchie (
       'schede_parrocchie': await db.query('schede_parrocchie'),
       'interventi_audio': await db.query('interventi_audio'),
       'interventi_campane': await db.query('interventi_campane'),
+      'schede_intervento_costi': await db.query('schede_intervento_costi'),
       'acconti': await getAcconti(),
     };
   }
@@ -916,6 +928,7 @@ CREATE TABLE schede_parrocchie (
     final schede = rowsFor('schede_parrocchie');
     final interventiAudio = rowsFor('interventi_audio');
     final interventiCampane = rowsFor('interventi_campane');
+    final schedeInterventoCosti = rowsFor('schede_intervento_costi');
     final db = await database;
 
     // MERGE conservativo: non elimina e non aggiorna mai una riga locale.
@@ -1013,6 +1026,14 @@ CREATE TABLE schede_parrocchie (
         final table = interventiAudio.contains(row) ? 'interventi_audio' : 'interventi_campane';
         final copy = Map<String, dynamic>.from(row)..['cliente_id'] = mappedId;
         await insertRow(table, copy);
+      }
+      for (final row in schedeInterventoCosti) {
+        final rawClienteId = row['cliente_id'];
+        final oldClienteId = rawClienteId is num ? rawClienteId.toInt() : int.tryParse('$rawClienteId');
+        final mappedId = oldClienteId == null ? null : clienteIdMap[oldClienteId];
+        if (mappedId == null) continue;
+        final copy = Map<String, dynamic>.from(row)..['cliente_id'] = mappedId;
+        await insertRow('schede_intervento_costi', copy);
       }
     });
     await createAutomaticBackup();
@@ -2461,6 +2482,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.people_alt_rounded,
         'Clienti',
         const ClientiScreen(),
+      ),
+      const _DashboardItem(
+        Icons.handyman_rounded,
+        'Schede\nIntervento',
+        const SchedeInterventoCostiScreen(),
       ),
       const _DashboardItem(
         Icons.inventory_2_rounded,
@@ -4875,6 +4901,163 @@ Future<void> aggiungiAcconto() async {
   }
 }
 
+
+
+class SchedeInterventoCostiScreen extends StatefulWidget {
+  const SchedeInterventoCostiScreen({super.key});
+  @override
+  State<SchedeInterventoCostiScreen> createState() => _SchedeInterventoCostiScreenState();
+}
+
+class _SchedeInterventoCostiScreenState extends State<SchedeInterventoCostiScreen> {
+  List<Map<String, dynamic>> _records = [];
+  List<Map<String, dynamic>> _clienti = [];
+  bool _loading = true;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    final db = await DatabaseHelper.instance.database;
+    final results = await Future.wait([
+      db.query('schede_intervento_costi', orderBy: 'data DESC, id DESC'),
+      DatabaseHelper.instance.getClienti(),
+    ]);
+    if (mounted) setState(() { _records = results[0]; _clienti = results[1]; _loading = false; });
+  }
+
+  double _n(dynamic v) => (v as num?)?.toDouble() ?? 0;
+  double _fuel(Map<String, dynamic> r) => (_n(r['km_andata']) * 2 * _n(r['consumo_litri_100km']) / 100) * _n(r['gasolio_litro']);
+  double _labor(Map<String, dynamic> r) => _n(r['ore_lavoro']) * _n(r['tecnici']) * _n(r['costo_orario_tecnico']);
+  double _parts(Map<String, dynamic> r) {
+    try { final rows = jsonDecode('${r['ricambi'] ?? '[]'}') as List; return rows.fold<double>(0, (v, x) => v + (_n(x['quantita']) * _n(x['prezzo']))); } catch (_) { return 0; }
+  }
+
+  Future<void> _newSheet() async {
+    if (_clienti.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Prima inserisci la parrocchia nella sezione Clienti.')));
+      return;
+    }
+    int? clienteId;
+    DateTime data = DateTime.now();
+    final km = TextEditingController();
+    final gasolio = TextEditingController();
+    final consumo = TextEditingController();
+    final intervento = TextEditingController();
+    final ore = TextEditingController();
+    final tecnici = TextEditingController(text: '1');
+    final costoOra = TextEditingController();
+    final parts = <Map<String, TextEditingController>>[];
+    void addPart() => parts.add({'nome': TextEditingController(), 'quantita': TextEditingController(text: '1'), 'prezzo': TextEditingController()});
+    addPart();
+    final formKey = GlobalKey<FormState>();
+    final saved = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) {
+      Widget field(TextEditingController c, String label, {bool decimal = false, int lines = 1}) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(controller: c, keyboardType: decimal ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text, maxLines: lines, decoration: InputDecoration(labelText: label), validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null));
+      return AlertDialog(
+        title: const Text('Nuova scheda intervento'),
+        content: SizedBox(width: 560, child: SingleChildScrollView(child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          DropdownButtonFormField<int>(value: clienteId, isExpanded: true, decoration: const InputDecoration(labelText: 'Parrocchia / cliente'), items: _clienti.map((c) => DropdownMenuItem<int>(value: c['id'] as int, child: Text('${c['parrocchia']?.toString().trim().isNotEmpty == true ? c['parrocchia'] : c['nome']} — ${c['paese'] ?? ''}', overflow: TextOverflow.ellipsis))).toList(), onChanged: (v) => setDialog(() => clienteId = v), validator: (v) => v == null ? 'Seleziona una parrocchia' : null),
+          ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.calendar_today), title: const Text('Data intervento'), subtitle: Text(DateFormat('dd/MM/yyyy').format(data)), onTap: () async { final d = await showDatePicker(context: ctx, initialDate: data, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setDialog(() => data = d); }),
+          const Divider(), const Text('TRASFERIMENTO E CARBURANTE', style: TextStyle(fontWeight: FontWeight.bold)),
+          field(km, 'Distanza sola andata da Via Ugo Pirro 9, Salerno (km)', decimal: true),
+          field(gasolio, 'Costo gasolio (€/litro)', decimal: true),
+          field(consumo, 'Consumo medio veicolo (litri / 100 km)', decimal: true),
+          const Text('Il calcolo considera automaticamente andata e ritorno.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const Divider(), const Text('INTERVENTO E RICAMBI', style: TextStyle(fontWeight: FontWeight.bold)),
+          field(intervento, 'Descrizione dell’intervento effettuato', lines: 4),
+          ...List.generate(parts.length, (i) => Card(
+            margin: const EdgeInsets.only(top: 6, bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(children: [
+                Row(children: [
+                  Expanded(child: Text('Pezzo sostituito ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                  IconButton(
+                    onPressed: parts.length == 1 ? null : () => setDialog(() { parts.removeAt(i); }),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ]),
+                TextFormField(controller: parts[i]['nome'], decoration: const InputDecoration(labelText: 'Descrizione pezzo')),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: TextFormField(controller: parts[i]['quantita'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Numero / quantità'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextFormField(controller: parts[i]['prezzo'], keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Costo unitario (€)'))),
+                ]),
+              ]),
+            ),
+          )),
+          Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => setDialog(() => addPart()), icon: const Icon(Icons.add), label: const Text('Aggiungi pezzo'))),
+          const Divider(), const Text('MANODOPERA', style: TextStyle(fontWeight: FontWeight.bold)),
+          field(ore, 'Ore impiegate per tecnico', decimal: true),
+          field(tecnici, 'Numero tecnici presenti'),
+          field(costoOra, 'Costo orario per tecnico (€)', decimal: true),
+          const Text('Costo manodopera = ore × tecnici × costo orario.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+        ])))),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton.icon(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(ctx, true); }, icon: const Icon(Icons.save), label: const Text('SALVA E CREA PDF'))],
+      );
+    }));
+    if (saved == true && clienteId != null) {
+      final ricambi = parts.where((x) => x['nome']!.text.trim().isNotEmpty).map((x) => {'nome': x['nome']!.text.trim(), 'quantita': double.tryParse(x['quantita']!.text.replaceAll(',', '.')) ?? 0, 'prezzo': double.tryParse(x['prezzo']!.text.replaceAll(',', '.')) ?? 0}).toList();
+      final values = {'cliente_id': clienteId!, 'data': DateFormat('yyyy-MM-dd').format(data), 'km_andata': double.tryParse(km.text.replaceAll(',', '.')) ?? 0, 'gasolio_litro': double.tryParse(gasolio.text.replaceAll(',', '.')) ?? 0, 'consumo_litri_100km': double.tryParse(consumo.text.replaceAll(',', '.')) ?? 0, 'intervento': intervento.text.trim(), 'ricambi': jsonEncode(ricambi), 'ore_lavoro': double.tryParse(ore.text.replaceAll(',', '.')) ?? 0, 'tecnici': int.tryParse(tecnici.text) ?? 1, 'costo_orario_tecnico': double.tryParse(costoOra.text.replaceAll(',', '.')) ?? 0};
+      final db = await DatabaseHelper.instance.database;
+      final id = await db.insert('schede_intervento_costi', values);
+      await DatabaseHelper.instance.autoBackup();
+      final record = {...values, 'id': id};
+      final cliente = _clienti.firstWhere((c) => c['id'] == clienteId);
+      await _createPdf(record, cliente);
+      await _load();
+    }
+    for (final c in [km, gasolio, consumo, intervento, ore, tecnici, costoOra]) { c.dispose(); }
+    for (final row in parts) { for (final c in row.values) { c.dispose(); } }
+  }
+
+  Future<void> _createPdf(Map<String, dynamic> r, Map<String, dynamic> c) async {
+    final fontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
+    final boldData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
+    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: pw.Font.ttf(fontData), bold: pw.Font.ttf(boldData)));
+    final kmTot = _n(r['km_andata']) * 2;
+    final fuelLitres = kmTot * _n(r['consumo_litri_100km']) / 100;
+    final fuel = _fuel(r); final labor = _labor(r); final partsCost = _parts(r); final total = fuel + labor + partsCost;
+    List<dynamic> ricambi = []; try { ricambi = jsonDecode('${r['ricambi'] ?? '[]'}') as List; } catch (_) {}
+    pdf.addPage(pw.MultiPage(pageFormat: PdfPageFormat.a4, build: (_) => [
+      pw.Text('SCHEDA INTERVENTO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 8), pw.Text('Data: ${DateFormat('dd/MM/yyyy').format(DateTime.parse('${r['data']}'))}'),
+      pw.Divider(), pw.Text('DATI PARROCCHIA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('Struttura: ${c['parrocchia'] ?? c['nome'] ?? ''}'), pw.Text('Referente: ${c['nome'] ?? ''}'),
+      pw.Text('Indirizzo: ${c['indirizzo'] ?? ''}'), pw.Text('Comune: ${c['paese'] ?? ''}'), pw.Text('Telefono: ${c['telefono'] ?? ''}'),
+      pw.SizedBox(height: 12), pw.Text('INTERVENTO EFFETTUATO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text('${r['intervento']}'),
+      pw.SizedBox(height: 12), pw.Text('TRASFERIMENTO E CARBURANTE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('Partenza: Via Ugo Pirro 9, Salerno'), pw.Text('Distanza andata: ${_n(r['km_andata']).toStringAsFixed(1)} km — A/R: ${kmTot.toStringAsFixed(1)} km'),
+      pw.Text('Consumo: ${_n(r['consumo_litri_100km']).toStringAsFixed(2)} l/100 km — Litri stimati: ${fuelLitres.toStringAsFixed(2)}'),
+      pw.Text('Prezzo gasolio: € ${_n(r['gasolio_litro']).toStringAsFixed(2)}/l — Costo carburante: € ${fuel.toStringAsFixed(2)}'),
+      pw.SizedBox(height: 12), pw.Text('PEZZI SOSTITUITI', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      if (ricambi.isEmpty) pw.Text('Nessun pezzo indicato') else pw.Table.fromTextArray(headers: ['Pezzo', 'Quantità', 'Costo unitario', 'Totale'], data: ricambi.map((x) => [ '${x['nome']}', '${_n(x['quantita']).toStringAsFixed(0)}', '€ ${_n(x['prezzo']).toStringAsFixed(2)}', '€ ${(_n(x['quantita']) * _n(x['prezzo'])).toStringAsFixed(2)}' ]).toList()),
+      pw.SizedBox(height: 12), pw.Text('MANODOPERA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('Ore per tecnico: ${_n(r['ore_lavoro']).toStringAsFixed(2)} — Tecnici presenti: ${r['tecnici']}'),
+      pw.Text('Costo orario per tecnico: € ${_n(r['costo_orario_tecnico']).toStringAsFixed(2)} — Costo manodopera: € ${labor.toStringAsFixed(2)}'),
+      pw.Divider(), pw.Align(alignment: pw.Alignment.centerRight, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [pw.Text('Carburante: € ${fuel.toStringAsFixed(2)}'), pw.Text('Ricambi: € ${partsCost.toStringAsFixed(2)}'), pw.Text('Manodopera: € ${labor.toStringAsFixed(2)}'), pw.SizedBox(height: 6), pw.Text('TOTALE INTERVENTO: € ${total.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))])),
+    ]));
+    await Printing.sharePdf(bytes: await pdf.save(), filename: 'Scheda_intervento_${r['id']}.pdf');
+  }
+
+  Future<void> _delete(Map<String, dynamic> r) async {
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Eliminare la scheda?'), content: const Text('La scheda e i relativi dati saranno eliminati.'), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina'))]));
+    if (ok == true) { final db = await DatabaseHelper.instance.database; await db.delete('schede_intervento_costi', where: 'id = ?', whereArgs: [r['id']]); await DatabaseHelper.instance.autoBackup(); await _load(); }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Schede intervento')),
+    floatingActionButton: FloatingActionButton.extended(onPressed: _newSheet, icon: const Icon(Icons.add), label: const Text('Nuova scheda')),
+    body: _loading ? const Center(child: CircularProgressIndicator()) : _records.isEmpty ? const Center(child: Text('Nessuna scheda intervento creata.')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: _records.length, itemBuilder: (ctx, i) {
+      final r = _records[i]; final matches = _clienti.where((x) => x['id'] == r['cliente_id']).toList(); final c = matches.isEmpty ? null : matches.first;
+      final nome = c == null ? 'Parrocchia non disponibile' : (c['parrocchia']?.toString().trim().isNotEmpty == true ? c['parrocchia'] : c['nome']);
+      final d = DateTime.tryParse('${r['data']}'); final total = _fuel(r) + _labor(r) + _parts(r);
+      return Card(child: ListTile(leading: const Icon(Icons.handyman_outlined), title: Text('$nome'), subtitle: Text('${d == null ? r['data'] : DateFormat('dd/MM/yyyy').format(d)} • Totale € ${total.toStringAsFixed(2)}'), trailing: PopupMenuButton<String>(onSelected: (v) async { if (v == 'pdf' && c != null) await _createPdf(r, c); if (v == 'delete') await _delete(r); }, itemBuilder: (_) => const [PopupMenuItem(value: 'pdf', child: Text('Crea / condividi PDF')), PopupMenuItem(value: 'delete', child: Text('Elimina'))])));
+    }),
+  );
+}
 
 class SchedaParrocchiaScreen extends StatefulWidget {
   final Map<String, dynamic> cliente;
