@@ -51,3 +51,12 @@ La versione Windows utilizza SQLite tramite FFI, quindi mantiene il database loc
 
 ### Scheda Parrocchia – PDF
 La scheda tecnica della parrocchia, collegata al cliente, dispone del pulsante **SCARICA PDF**. Il PDF comprende dati della parrocchia e del cliente, impianto audio, campane e note/ultimi interventi. Su Windows viene salvato automaticamente nella cartella Download e aperto al termine della generazione.
+
+
+## Schede intervento con calcolo costi
+
+Dalla schermata principale è disponibile la sezione **Schede Intervento**. Ogni scheda collega una parrocchia già presente in Clienti e registra data, distanza di sola andata da Via Ugo Pirro 9 a Salerno, prezzo del gasolio al litro, consumo medio del veicolo (litri/100 km), descrizione dell'intervento, ricambi con quantità e costo unitario, ore per tecnico, numero di tecnici e costo orario per tecnico.
+
+Il costo carburante viene calcolato su andata e ritorno; la manodopera è calcolata come ore per tecnico × numero tecnici × costo orario. Il PDF riporta i dati della parrocchia, l'intervento, il dettaglio dei ricambi e il riepilogo di carburante, ricambi, manodopera e totale. Dopo il salvataggio si apre la condivisione del PDF; il PDF può essere rigenerato anche dalla scheda già salvata.
+
+La versione database è stata aggiornata a 18: all'avvio l'app migra automaticamente il database esistente senza cancellare le schede, i clienti o i preventivi precedenti. La versione app è stata incrementata a 1.2.0+4 per consentire l'aggiornamento sopra l'installazione precedente.
