@@ -258,7 +258,7 @@ jobs:
           $iss = @"
           [Setup]
           AppName=Gestione Preventivi
-          AppVersion=1.1.0
+          AppVersion=1.2.0
           AppPublisher=Gestione Preventivi
           DefaultDirName={autopf}\Gestione Preventivi
           DefaultGroupName=Gestione Preventivi
