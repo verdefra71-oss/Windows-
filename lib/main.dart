@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -4927,88 +4928,107 @@ class _SchedeInterventoCostiScreenState extends State<SchedeInterventoCostiScree
   }
 
   double _n(dynamic v) => (v as num?)?.toDouble() ?? 0;
-  double _fuel(Map<String, dynamic> r) => (_n(r['km_andata']) * 2 * _n(r['consumo_litri_100km']) / 100) * _n(r['gasolio_litro']);
+  double _fuel(Map<String, dynamic> r) => _n(r['gasolio_litro']);
   double _labor(Map<String, dynamic> r) => _n(r['ore_lavoro']) * _n(r['tecnici']) * _n(r['costo_orario_tecnico']);
   double _parts(Map<String, dynamic> r) {
     try { final rows = jsonDecode('${r['ricambi'] ?? '[]'}') as List; return rows.fold<double>(0, (v, x) => v + (_n(x['quantita']) * _n(x['prezzo']))); } catch (_) { return 0; }
   }
 
+  Future<double?> _calcolaDistanza(String indirizzo) async {
+    final geo = await http.get(Uri.https('nominatim.openstreetmap.org', '/search', {'q': '$indirizzo, Italia', 'format': 'json', 'limit': '1'}), headers: {'User-Agent': 'PreventiviInterventi/1.3'});
+    if (geo.statusCode != 200) return null;
+    final results = jsonDecode(geo.body) as List;
+    if (results.isEmpty) return null;
+    final dest = results.first;
+    final originResponse = await http.get(
+      Uri.https('nominatim.openstreetmap.org', '/search', {'q': 'Via Ugo Pirro 9, Salerno, Italia', 'format': 'json', 'limit': '1'}),
+      headers: {'User-Agent': 'PreventiviInterventi/1.3'},
+    );
+    if (originResponse.statusCode != 200) return null;
+    final origins = jsonDecode(originResponse.body) as List;
+    if (origins.isEmpty) return null;
+    final origin = origins.first;
+    final origineLat = double.parse('${origin['lat']}');
+    final origineLon = double.parse('${origin['lon']}');
+    final lat = double.parse('${dest['lat']}');
+    final lon = double.parse('${dest['lon']}');
+    final route = await http.get(Uri.parse('https://router.project-osrm.org/route/v1/driving/$origineLon,$origineLat;$lon,$lat?overview=false'));
+    if (route.statusCode != 200) return null;
+    final data = jsonDecode(route.body) as Map<String, dynamic>;
+    if (data['code'] != 'Ok' || (data['routes'] as List).isEmpty) return null;
+    return (((data['routes'] as List).first['distance'] as num).toDouble()) / 1000;
+  }
+
   Future<void> _newSheet() async {
-    if (_clienti.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Prima inserisci la parrocchia nella sezione Clienti.')));
-      return;
-    }
-    int? clienteId;
+    Map<String, dynamic>? clienteSelezionato;
     DateTime data = DateTime.now();
+    final nome = TextEditingController();
+    final parrocchia = TextEditingController();
+    final indirizzo = TextEditingController();
+    final comune = TextEditingController();
     final km = TextEditingController();
     final gasolio = TextEditingController();
-    final consumo = TextEditingController();
     final intervento = TextEditingController();
     final ore = TextEditingController();
     final tecnici = TextEditingController(text: '1');
     final costoOra = TextEditingController();
     final parts = <Map<String, TextEditingController>>[];
+    bool manuale = false;
+    bool calcoloKm = false;
     void addPart() => parts.add({'nome': TextEditingController(), 'quantita': TextEditingController(text: '1'), 'prezzo': TextEditingController()});
     addPart();
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) {
-      Widget field(TextEditingController c, String label, {bool decimal = false, int lines = 1}) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(controller: c, keyboardType: decimal ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text, maxLines: lines, decoration: InputDecoration(labelText: label), validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null));
-      return AlertDialog(
-        title: const Text('Nuova scheda intervento'),
-        content: SizedBox(width: 560, child: SingleChildScrollView(child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          DropdownButtonFormField<int>(value: clienteId, isExpanded: true, decoration: const InputDecoration(labelText: 'Parrocchia / cliente'), items: _clienti.map((c) => DropdownMenuItem<int>(value: c['id'] as int, child: Text('${c['parrocchia']?.toString().trim().isNotEmpty == true ? c['parrocchia'] : c['nome']} — ${c['paese'] ?? ''}', overflow: TextOverflow.ellipsis))).toList(), onChanged: (v) => setDialog(() => clienteId = v), validator: (v) => v == null ? 'Seleziona una parrocchia' : null),
-          ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.calendar_today), title: const Text('Data intervento'), subtitle: Text(DateFormat('dd/MM/yyyy').format(data)), onTap: () async { final d = await showDatePicker(context: ctx, initialDate: data, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setDialog(() => data = d); }),
-          const Divider(), const Text('TRASFERIMENTO E CARBURANTE', style: TextStyle(fontWeight: FontWeight.bold)),
-          field(km, 'Distanza sola andata da Via Ugo Pirro 9, Salerno (km)', decimal: true),
-          field(gasolio, 'Costo gasolio (€/litro)', decimal: true),
-          field(consumo, 'Consumo medio veicolo (litri / 100 km)', decimal: true),
-          const Text('Il calcolo considera automaticamente andata e ritorno.', style: TextStyle(fontSize: 12, color: Colors.black54)),
-          const Divider(), const Text('INTERVENTO E RICAMBI', style: TextStyle(fontWeight: FontWeight.bold)),
-          field(intervento, 'Descrizione dell’intervento effettuato', lines: 4),
-          ...List.generate(parts.length, (i) => Card(
-            margin: const EdgeInsets.only(top: 6, bottom: 8),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(children: [
-                Row(children: [
-                  Expanded(child: Text('Pezzo sostituito ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                  IconButton(
-                    onPressed: parts.length == 1 ? null : () => setDialog(() { parts.removeAt(i); }),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ]),
-                TextFormField(controller: parts[i]['nome'], decoration: const InputDecoration(labelText: 'Descrizione pezzo')),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: TextFormField(controller: parts[i]['quantita'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Numero / quantità'))),
-                  const SizedBox(width: 8),
-                  Expanded(child: TextFormField(controller: parts[i]['prezzo'], keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Costo unitario (€)'))),
-                ]),
-              ]),
-            ),
-          )),
-          Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => setDialog(() => addPart()), icon: const Icon(Icons.add), label: const Text('Aggiungi pezzo'))),
-          const Divider(), const Text('MANODOPERA', style: TextStyle(fontWeight: FontWeight.bold)),
-          field(ore, 'Ore impiegate per tecnico', decimal: true),
-          field(tecnici, 'Numero tecnici presenti'),
-          field(costoOra, 'Costo orario per tecnico (€)', decimal: true),
-          const Text('Costo manodopera = ore × tecnici × costo orario.', style: TextStyle(fontSize: 12, color: Colors.black54)),
-        ])))),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton.icon(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(ctx, true); }, icon: const Icon(Icons.save), label: const Text('SALVA E CREA PDF'))],
-      );
-    }));
-    if (saved == true && clienteId != null) {
-      final ricambi = parts.where((x) => x['nome']!.text.trim().isNotEmpty).map((x) => {'nome': x['nome']!.text.trim(), 'quantita': double.tryParse(x['quantita']!.text.replaceAll(',', '.')) ?? 0, 'prezzo': double.tryParse(x['prezzo']!.text.replaceAll(',', '.')) ?? 0}).toList();
-      final values = {'cliente_id': clienteId!, 'data': DateFormat('yyyy-MM-dd').format(data), 'km_andata': double.tryParse(km.text.replaceAll(',', '.')) ?? 0, 'gasolio_litro': double.tryParse(gasolio.text.replaceAll(',', '.')) ?? 0, 'consumo_litri_100km': double.tryParse(consumo.text.replaceAll(',', '.')) ?? 0, 'intervento': intervento.text.trim(), 'ricambi': jsonEncode(ricambi), 'ore_lavoro': double.tryParse(ore.text.replaceAll(',', '.')) ?? 0, 'tecnici': int.tryParse(tecnici.text) ?? 1, 'costo_orario_tecnico': double.tryParse(costoOra.text.replaceAll(',', '.')) ?? 0};
-      final db = await DatabaseHelper.instance.database;
-      final id = await db.insert('schede_intervento_costi', values);
-      await DatabaseHelper.instance.autoBackup();
-      final record = {...values, 'id': id};
-      final cliente = _clienti.firstWhere((c) => c['id'] == clienteId);
-      await _createPdf(record, cliente);
-      await _load();
+
+    Future<void> scegliCliente(BuildContext dialogContext, StateSetter setDialog) async {
+      final ricerca = TextEditingController();
+      final scelto = await showDialog<Map<String, dynamic>>(context: dialogContext, builder: (searchCtx) => StatefulBuilder(builder: (searchCtx, setSearch) {
+        final filtrati = _clienti.where((c) => '${c['nome'] ?? ''} ${c['parrocchia'] ?? ''} ${c['paese'] ?? ''} ${c['indirizzo'] ?? ''}'.toLowerCase().contains(ricerca.text.toLowerCase())).toList();
+        return AlertDialog(title: const Text('Cerca nella sezione Clienti'), content: SizedBox(width: 520, height: 420, child: Column(children: [
+          TextField(controller: ricerca, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Cerca parrocchia o cliente'), onChanged: (_) => setSearch(() {})),
+          const SizedBox(height: 8), Expanded(child: filtrati.isEmpty ? const Center(child: Text('Nessun cliente trovato')) : ListView.builder(itemCount: filtrati.length, itemBuilder: (_, i) { final c = filtrati[i]; return ListTile(title: Text('${c['parrocchia']?.toString().trim().isNotEmpty == true ? c['parrocchia'] : c['nome']}'), subtitle: Text('${c['indirizzo'] ?? ''} ${c['paese'] ?? ''}'), onTap: () => Navigator.pop(searchCtx, c)); })),
+        ])), actions: [TextButton(onPressed: () => Navigator.pop(searchCtx), child: const Text('ANNULLA'))]);
+      }));
+      if (scelto != null) {
+        setDialog(() { clienteSelezionato = scelto; manuale = false; nome.text = '${scelto['nome'] ?? ''}'; parrocchia.text = '${scelto['parrocchia'] ?? ''}'; indirizzo.text = '${scelto['indirizzo'] ?? ''}'; comune.text = '${scelto['paese'] ?? ''}'; km.clear(); });
+        final addr = '${scelto['indirizzo'] ?? ''}, ${scelto['cap'] ?? ''} ${scelto['paese'] ?? ''}';
+        if (addr.trim().isNotEmpty) {
+          setDialog(() => calcoloKm = true);
+          try { final d = await _calcolaDistanza(addr); if (d != null) setDialog(() => km.text = d.toStringAsFixed(1)); } catch (_) {}
+          setDialog(() => calcoloKm = false);
+        }
+      }
     }
-    for (final c in [km, gasolio, consumo, intervento, ore, tecnici, costoOra]) { c.dispose(); }
+
+    final saved = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) {
+      Widget field(TextEditingController c, String label, {bool decimal = false, int lines = 1, bool required = true, void Function(String)? onChanged}) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(controller: c, onChanged: onChanged, keyboardType: decimal ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text, maxLines: lines, decoration: InputDecoration(labelText: label), validator: (v) => required && (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null));
+      return AlertDialog(title: const Text('Nuova scheda intervento'), content: SizedBox(width: 560, child: SingleChildScrollView(child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('DATI PARROCCHIA / CLIENTE', style: TextStyle(fontWeight: FontWeight.bold)),
+        Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => scegliCliente(ctx, setDialog), icon: const Icon(Icons.people_outline), label: const Text('Cerca nella sezione Clienti'))), const SizedBox(width: 8), TextButton(onPressed: () => setDialog(() { clienteSelezionato = null; manuale = true; nome.clear(); parrocchia.clear(); indirizzo.clear(); comune.clear(); km.clear(); }), child: const Text('Inserisci manualmente'))]),
+        if (clienteSelezionato != null && !manuale) Card(child: ListTile(leading: const Icon(Icons.business), title: Text(parrocchia.text.isNotEmpty ? parrocchia.text : nome.text), subtitle: Text('${indirizzo.text}, ${comune.text}'), trailing: IconButton(icon: const Icon(Icons.edit), onPressed: () => setDialog(() { clienteSelezionato = null; manuale = true; })))),
+        if (manuale || clienteSelezionato == null) ...[field(nome, 'Nome referente / cliente'), field(parrocchia, 'Nome parrocchia / struttura', required: false), field(indirizzo, 'Indirizzo completo (via e numero civico)', onChanged: (_) => setDialog(() {})), field(comune, 'Comune / località', onChanged: (_) => setDialog(() {}))],
+        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.calendar_today), title: const Text('Data intervento'), subtitle: Text(DateFormat('dd/MM/yyyy').format(data)), onTap: () async { final d = await showDatePicker(context: ctx, initialDate: data, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setDialog(() => data = d); }),
+        const Divider(), const Text('TRASFERIMENTO E CARBURANTE', style: TextStyle(fontWeight: FontWeight.bold)),
+        Row(children: [Expanded(child: Text('Distanza calcolata automaticamente: ${km.text.isEmpty ? '—' : '${km.text} km sola andata'}')), if (calcoloKm) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))]),
+        if (km.text.isEmpty && (clienteSelezionato != null || indirizzo.text.trim().isNotEmpty)) Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: calcoloKm ? null : () async { setDialog(() => calcoloKm = true); try { final d = await _calcolaDistanza('${indirizzo.text}, ${comune.text}'); if (d != null) setDialog(() => km.text = d.toStringAsFixed(1)); else if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Indirizzo non trovato: verifica via, numero civico e comune.'))); } catch (_) { if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossibile calcolare il percorso. Verifica la connessione.'))); } setDialog(() => calcoloKm = false); }, icon: const Icon(Icons.route), label: const Text('Calcola distanza'))),
+        field(gasolio, 'Costo gasolio complessivo andata e ritorno (€)', decimal: true),
+        const Text('Inserisci il costo effettivo del carburante per l’intero viaggio A/R. Non viene richiesto il consumo medio.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+        const Divider(), const Text('INTERVENTO E RICAMBI', style: TextStyle(fontWeight: FontWeight.bold)), field(intervento, 'Descrizione dell’intervento effettuato', lines: 4),
+        ...List.generate(parts.length, (i) => Card(margin: const EdgeInsets.only(top: 6, bottom: 8), child: Padding(padding: const EdgeInsets.all(10), child: Column(children: [Row(children: [Expanded(child: Text('Pezzo sostituito ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold))), IconButton(onPressed: parts.length == 1 ? null : () => setDialog(() => parts.removeAt(i)), icon: const Icon(Icons.delete_outline))]), TextFormField(controller: parts[i]['nome'], decoration: const InputDecoration(labelText: 'Descrizione pezzo')), const SizedBox(height: 8), Row(children: [Expanded(child: TextFormField(controller: parts[i]['quantita'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Numero / quantità'))), const SizedBox(width: 8), Expanded(child: TextFormField(controller: parts[i]['prezzo'], keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Costo unitario (€)')))])])))),
+        Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => setDialog(() => addPart()), icon: const Icon(Icons.add), label: const Text('Aggiungi pezzo'))),
+        const Divider(), const Text('MANODOPERA', style: TextStyle(fontWeight: FontWeight.bold)), field(ore, 'Ore impiegate per tecnico', decimal: true), field(tecnici, 'Numero tecnici presenti'), field(costoOra, 'Costo orario per tecnico (€)', decimal: true),
+      ])))), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton.icon(onPressed: () { if (!formKey.currentState!.validate()) return; if (km.text.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Calcola prima la distanza dall’indirizzo del cliente.'))); return; } Navigator.pop(ctx, true); }, icon: const Icon(Icons.save), label: const Text('SALVA E CREA PDF'))]);
+    }));
+
+    if (saved == true) {
+      final db = await DatabaseHelper.instance.database;
+      int clienteId; Map<String, dynamic> cliente;
+      if (clienteSelezionato != null) { cliente = clienteSelezionato!; clienteId = cliente['id'] as int; }
+      else { clienteId = await db.insert('clienti', {'nome': nome.text.trim(), 'parrocchia': parrocchia.text.trim(), 'indirizzo': indirizzo.text.trim(), 'paese': comune.text.trim(), 'tipo_struttura': 'Parrocchia'}); cliente = {'id': clienteId, 'nome': nome.text.trim(), 'parrocchia': parrocchia.text.trim(), 'indirizzo': indirizzo.text.trim(), 'paese': comune.text.trim()}; }
+      final ricambi = parts.where((x) => x['nome']!.text.trim().isNotEmpty).map((x) => {'nome': x['nome']!.text.trim(), 'quantita': double.tryParse(x['quantita']!.text.replaceAll(',', '.')) ?? 0, 'prezzo': double.tryParse(x['prezzo']!.text.replaceAll(',', '.')) ?? 0}).toList();
+      final values = {'cliente_id': clienteId, 'data': DateFormat('yyyy-MM-dd').format(data), 'km_andata': double.tryParse(km.text.replaceAll(',', '.')) ?? 0, 'gasolio_litro': double.tryParse(gasolio.text.replaceAll(',', '.')) ?? 0, 'consumo_litri_100km': 0, 'intervento': intervento.text.trim(), 'ricambi': jsonEncode(ricambi), 'ore_lavoro': double.tryParse(ore.text.replaceAll(',', '.')) ?? 0, 'tecnici': int.tryParse(tecnici.text) ?? 1, 'costo_orario_tecnico': double.tryParse(costoOra.text.replaceAll(',', '.')) ?? 0};
+      final id = await db.insert('schede_intervento_costi', values); await DatabaseHelper.instance.autoBackup(); await _createPdf({...values, 'id': id}, cliente); await _load();
+    }
+    for (final c in [nome, parrocchia, indirizzo, comune, km, gasolio, intervento, ore, tecnici, costoOra]) { c.dispose(); }
     for (final row in parts) { for (final c in row.values) { c.dispose(); } }
   }
 
@@ -5017,7 +5037,6 @@ class _SchedeInterventoCostiScreenState extends State<SchedeInterventoCostiScree
     final boldData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
     final pdf = pw.Document(theme: pw.ThemeData.withFont(base: pw.Font.ttf(fontData), bold: pw.Font.ttf(boldData)));
     final kmTot = _n(r['km_andata']) * 2;
-    final fuelLitres = kmTot * _n(r['consumo_litri_100km']) / 100;
     final fuel = _fuel(r); final labor = _labor(r); final partsCost = _parts(r); final total = fuel + labor + partsCost;
     List<dynamic> ricambi = []; try { ricambi = jsonDecode('${r['ricambi'] ?? '[]'}') as List; } catch (_) {}
     pdf.addPage(pw.MultiPage(pageFormat: PdfPageFormat.a4, build: (_) => [
@@ -5029,14 +5048,13 @@ class _SchedeInterventoCostiScreenState extends State<SchedeInterventoCostiScree
       pw.SizedBox(height: 12), pw.Text('INTERVENTO EFFETTUATO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text('${r['intervento']}'),
       pw.SizedBox(height: 12), pw.Text('TRASFERIMENTO E CARBURANTE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('Partenza: Via Ugo Pirro 9, Salerno'), pw.Text('Distanza andata: ${_n(r['km_andata']).toStringAsFixed(1)} km — A/R: ${kmTot.toStringAsFixed(1)} km'),
-      pw.Text('Consumo: ${_n(r['consumo_litri_100km']).toStringAsFixed(2)} l/100 km — Litri stimati: ${fuelLitres.toStringAsFixed(2)}'),
-      pw.Text('Prezzo gasolio: € ${_n(r['gasolio_litro']).toStringAsFixed(2)}/l — Costo carburante: € ${fuel.toStringAsFixed(2)}'),
+      pw.Text('Costo gasolio (andata e ritorno): € ${fuel.toStringAsFixed(2)}'),
       pw.SizedBox(height: 12), pw.Text('PEZZI SOSTITUITI', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       if (ricambi.isEmpty) pw.Text('Nessun pezzo indicato') else pw.Table.fromTextArray(headers: ['Pezzo', 'Quantità', 'Costo unitario', 'Totale'], data: ricambi.map((x) => [ '${x['nome']}', '${_n(x['quantita']).toStringAsFixed(0)}', '€ ${_n(x['prezzo']).toStringAsFixed(2)}', '€ ${(_n(x['quantita']) * _n(x['prezzo'])).toStringAsFixed(2)}' ]).toList()),
       pw.SizedBox(height: 12), pw.Text('MANODOPERA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('Ore per tecnico: ${_n(r['ore_lavoro']).toStringAsFixed(2)} — Tecnici presenti: ${r['tecnici']}'),
       pw.Text('Costo orario per tecnico: € ${_n(r['costo_orario_tecnico']).toStringAsFixed(2)} — Costo manodopera: € ${labor.toStringAsFixed(2)}'),
-      pw.Divider(), pw.Align(alignment: pw.Alignment.centerRight, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [pw.Text('Carburante: € ${fuel.toStringAsFixed(2)}'), pw.Text('Ricambi: € ${partsCost.toStringAsFixed(2)}'), pw.Text('Manodopera: € ${labor.toStringAsFixed(2)}'), pw.SizedBox(height: 6), pw.Text('TOTALE INTERVENTO: € ${total.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))])),
+      pw.Divider(), pw.Align(alignment: pw.Alignment.centerRight, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [pw.Text('Gasolio A/R: € ${fuel.toStringAsFixed(2)}'), pw.Text('Ricambi: € ${partsCost.toStringAsFixed(2)}'), pw.Text('Manodopera: € ${labor.toStringAsFixed(2)}'), pw.SizedBox(height: 6), pw.Text('TOTALE INTERVENTO: € ${total.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))])),
     ]));
     await Printing.sharePdf(bytes: await pdf.save(), filename: 'Scheda_intervento_${r['id']}.pdf');
   }
