@@ -284,7 +284,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 16,
+      version: 17,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -370,6 +370,19 @@ CREATE TABLE schede_parrocchie (
   campane_note TEXT
 )
 ''');
+        await db.execute('''CREATE TABLE interventi_audio (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL,
+          data TEXT NOT NULL, tipo_intervento TEXT NOT NULL,
+          audio_diffusori_numero INTEGER NOT NULL DEFAULT 0, audio_diffusori_marca TEXT,
+          audio_amplificatore_marca TEXT, audio_microfoni_numero INTEGER NOT NULL DEFAULT 0,
+          audio_microfoni_marca TEXT, audio_qualita TEXT, audio_note TEXT
+        )''');
+        await db.execute('''CREATE TABLE interventi_campane (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL,
+          data TEXT NOT NULL, tipo_intervento TEXT NOT NULL,
+          campane_numero INTEGER NOT NULL DEFAULT 0, campane_programmatore TEXT,
+          campane_specifiche_impianto TEXT, campane_note TEXT
+        )''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 16) {
@@ -463,6 +476,17 @@ CREATE TABLE schede_parrocchie (
   campane_note TEXT
 )
 ''');
+        }
+        if (oldVersion < 17) {
+          await db.execute("CREATE TABLE interventi_audio (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, tipo_intervento TEXT NOT NULL, audio_diffusori_numero INTEGER NOT NULL DEFAULT 0, audio_diffusori_marca TEXT, audio_amplificatore_marca TEXT, audio_microfoni_numero INTEGER NOT NULL DEFAULT 0, audio_microfoni_marca TEXT, audio_qualita TEXT, audio_note TEXT)");
+          await db.execute("CREATE TABLE interventi_campane (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, tipo_intervento TEXT NOT NULL, campane_numero INTEGER NOT NULL DEFAULT 0, campane_programmatore TEXT, campane_specifiche_impianto TEXT, campane_note TEXT)");
+          final legacy = await db.query('schede_parrocchie');
+          final oggi = DateFormat('yyyy-MM-dd').format(DateTime.now());
+          for (final row in legacy) {
+            final cid = row['cliente_id'];
+            await db.insert('interventi_audio', {'cliente_id': cid, 'data': oggi, 'tipo_intervento': 'Storico scheda esistente', 'audio_diffusori_numero': row['audio_diffusori_numero'] ?? 0, 'audio_diffusori_marca': row['audio_diffusori_marca'], 'audio_amplificatore_marca': row['audio_amplificatore_marca'], 'audio_microfoni_numero': row['audio_microfoni_numero'] ?? 0, 'audio_microfoni_marca': row['audio_microfoni_marca'], 'audio_qualita': row['audio_qualita'], 'audio_note': row['audio_note']});
+            await db.insert('interventi_campane', {'cliente_id': cid, 'data': oggi, 'tipo_intervento': 'Storico scheda esistente', 'campane_numero': row['campane_numero'] ?? 0, 'campane_programmatore': row['campane_programmatore'], 'campane_specifiche_impianto': row['campane_specifiche_impianto'], 'campane_note': row['campane_note']});
+          }
         }
       },
     );
@@ -844,6 +868,8 @@ CREATE TABLE schede_parrocchie (
       'preventivi': await db.query('preventivi'),
       'fatture': await db.query('fatture'),
       'schede_parrocchie': await db.query('schede_parrocchie'),
+      'interventi_audio': await db.query('interventi_audio'),
+      'interventi_campane': await db.query('interventi_campane'),
       'acconti': await getAcconti(),
     };
   }
@@ -888,6 +914,8 @@ CREATE TABLE schede_parrocchie (
     final preventivi = rowsFor('preventivi');
     final fatture = rowsFor('fatture');
     final schede = rowsFor('schede_parrocchie');
+    final interventiAudio = rowsFor('interventi_audio');
+    final interventiCampane = rowsFor('interventi_campane');
     final db = await database;
 
     // MERGE conservativo: non elimina e non aggiorna mai una riga locale.
@@ -976,6 +1004,15 @@ CREATE TABLE schede_parrocchie (
           ..['cliente_id'] = mappedId;
         await insertRow('schede_parrocchie', row);
         schedeKeys.add(key);
+      }
+      for (final row in [...interventiAudio, ...interventiCampane]) {
+        final rawClienteId = row['cliente_id'];
+        final oldClienteId = rawClienteId is num ? rawClienteId.toInt() : int.tryParse('$rawClienteId');
+        final mappedId = oldClienteId == null ? null : clienteIdMap[oldClienteId];
+        if (mappedId == null) continue;
+        final table = interventiAudio.contains(row) ? 'interventi_audio' : 'interventi_campane';
+        final copy = Map<String, dynamic>.from(row)..['cliente_id'] = mappedId;
+        await insertRow(table, copy);
       }
     });
     await createAutomaticBackup();
@@ -4841,477 +4878,79 @@ Future<void> aggiungiAcconto() async {
 
 class SchedaParrocchiaScreen extends StatefulWidget {
   final Map<String, dynamic> cliente;
-
-  const SchedaParrocchiaScreen({
-    super.key,
-    required this.cliente,
-  });
-
+  const SchedaParrocchiaScreen({super.key, required this.cliente});
   @override
   State<SchedaParrocchiaScreen> createState() => _SchedaParrocchiaScreenState();
 }
 
-class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  late final TextEditingController _diffusoriNumero;
-  late final TextEditingController _diffusoriMarca;
-  late final TextEditingController _amplificatoreMarca;
-  late final TextEditingController _microfoniNumero;
-  late final TextEditingController _microfoniMarca;
-  late final TextEditingController _qualita;
-  late final TextEditingController _audioNote;
-
-  late final TextEditingController _campaneNumero;
-  late final TextEditingController _programmatore;
-  late final TextEditingController _specificheImpianto;
-  late final TextEditingController _campaneNote;
-
+class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  List<Map<String, dynamic>> _audio = [];
+  List<Map<String, dynamic>> _campane = [];
   bool _loading = true;
-  bool _saving = false;
+  int get _clienteId => widget.cliente['id'] as int;
 
   @override
-  void initState() {
-    super.initState();
-    _diffusoriNumero = TextEditingController(text: '0');
-    _diffusoriMarca = TextEditingController();
-    _amplificatoreMarca = TextEditingController();
-    _microfoniNumero = TextEditingController(text: '0');
-    _microfoniMarca = TextEditingController();
-    _qualita = TextEditingController();
-    _audioNote = TextEditingController();
-    _campaneNumero = TextEditingController(text: '0');
-    _programmatore = TextEditingController();
-    _specificheImpianto = TextEditingController();
-    _campaneNote = TextEditingController();
-    _carica();
-  }
+  void initState() { super.initState(); _tabs = TabController(length: 2, vsync: this); _carica(); }
 
   Future<void> _carica() async {
-    final id = widget.cliente['id'] as int;
-    final s = await DatabaseHelper.instance.getSchedaParrocchia(id);
-    if (s != null) {
-      _diffusoriNumero.text = '${s['audio_diffusori_numero'] ?? 0}';
-      _diffusoriMarca.text = '${s['audio_diffusori_marca'] ?? ''}';
-      _amplificatoreMarca.text = '${s['audio_amplificatore_marca'] ?? ''}';
-      _microfoniNumero.text = '${s['audio_microfoni_numero'] ?? 0}';
-      _microfoniMarca.text = '${s['audio_microfoni_marca'] ?? ''}';
-      _qualita.text = '${s['audio_qualita'] ?? ''}';
-      _audioNote.text = '${s['audio_note'] ?? ''}';
-      _campaneNumero.text = '${s['campane_numero'] ?? 0}';
-      _programmatore.text = '${s['campane_programmatore'] ?? ''}';
-      _specificheImpianto.text = '${s['campane_specifiche_impianto'] ?? ''}';
-      _campaneNote.text = '${s['campane_note'] ?? ''}';
+    final db = await DatabaseHelper.instance.database;
+    final a = await db.query('interventi_audio', where: 'cliente_id = ?', whereArgs: [_clienteId], orderBy: 'data DESC, id DESC');
+    final c = await db.query('interventi_campane', where: 'cliente_id = ?', whereArgs: [_clienteId], orderBy: 'data DESC, id DESC');
+    if (mounted) setState(() { _audio = a; _campane = c; _loading = false; });
+  }
+
+  Future<void> _nuovo(bool audio, [Map<String, dynamic>? record]) async {
+    final fields = audio
+      ? <String>['audio_diffusori_numero','audio_diffusori_marca','audio_amplificatore_marca','audio_microfoni_numero','audio_microfoni_marca','audio_qualita','audio_note']
+      : <String>['campane_numero','campane_programmatore','campane_specifiche_impianto','campane_note'];
+    final labels = <String, String>{
+      'audio_diffusori_numero':'Numero diffusori','audio_diffusori_marca':'Marca diffusori','audio_amplificatore_marca':'Marca / modello amplificatore','audio_microfoni_numero':'Numero microfoni','audio_microfoni_marca':'Marca microfoni','audio_qualita':'Qualità dell’impianto','audio_note':'Note / ultimi interventi audio',
+      'campane_numero':'Numero campane','campane_programmatore':'Programmatore esistente','campane_specifiche_impianto':'Specifiche dell’impianto campane','campane_note':'Note / ultimi interventi campane'};
+    final controllers = <String, TextEditingController>{};
+    for (final f in fields) { controllers[f] = TextEditingController(text: '${record?[f] ?? (f.endsWith('_numero') ? 0 : '')}'); }
+    DateTime selected = DateTime.tryParse('${record?['data'] ?? ''}') ?? DateTime.now();
+    final tipo = TextEditingController(text: '${record?['tipo_intervento'] ?? ''}');
+    final formKey = GlobalKey<FormState>();
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
+      title: Text('${record == null ? 'Nuova' : 'Modifica'} scheda intervento ${audio ? 'audio' : 'campane'}'),
+      content: SizedBox(width: 520, child: SingleChildScrollView(child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.calendar_today), title: const Text('Data intervento'), subtitle: Text(DateFormat('dd/MM/yyyy').format(selected)), onTap: () async { final d = await showDatePicker(context: ctx, initialDate: selected, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setDialog(() => selected = d); }),
+        TextFormField(controller: tipo, decoration: const InputDecoration(labelText: 'Tipo di intervento'), validator: (v) => v == null || v.trim().isEmpty ? 'Inserisci il tipo di intervento' : null),
+        const SizedBox(height: 12),
+        ...fields.map((f) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(controller: controllers[f], keyboardType: f.endsWith('_numero') ? TextInputType.number : TextInputType.text, maxLines: f.endsWith('_note') || f.contains('specifiche') ? 4 : 1, decoration: InputDecoration(labelText: labels[f], prefixIcon: Icon(f.endsWith('_numero') ? Icons.numbers : Icons.edit_note))))),
+      ])))),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(ctx, true); }, child: const Text('SALVA'))],
+    )));
+    if (ok == true) {
+      final values = <String, dynamic>{'cliente_id': _clienteId, 'data': DateFormat('yyyy-MM-dd').format(selected), 'tipo_intervento': tipo.text.trim()};
+      for (final f in fields) { values[f] = f.endsWith('_numero') ? (int.tryParse(controllers[f]!.text.trim()) ?? 0) : controllers[f]!.text.trim(); }
+      final db = await DatabaseHelper.instance.database;
+      final table = audio ? 'interventi_audio' : 'interventi_campane';
+      if (record == null) { await db.insert(table, values); } else { await db.update(table, values, where: 'id = ?', whereArgs: [record['id']]); }
+      await DatabaseHelper.instance.autoBackup();
+      await _carica();
     }
-    if (mounted) setState(() => _loading = false);
+    for (final c in controllers.values) { c.dispose(); } tipo.dispose();
   }
 
-  int _numero(TextEditingController c) => int.tryParse(c.text.trim()) ?? 0;
-
-  Future<void> _salva() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
-    try {
-      await DatabaseHelper.instance.saveSchedaParrocchia(
-        clienteId: widget.cliente['id'] as int,
-        audioDiffusoriNumero: _numero(_diffusoriNumero),
-        audioDiffusoriMarca: _diffusoriMarca.text.trim(),
-        audioAmplificatoreMarca: _amplificatoreMarca.text.trim(),
-        audioMicrofoniNumero: _numero(_microfoniNumero),
-        audioMicrofoniMarca: _microfoniMarca.text.trim(),
-        audioQualita: _qualita.text.trim(),
-        audioNote: _audioNote.text.trim(),
-        campaneNumero: _numero(_campaneNumero),
-        campaneProgrammatore: _programmatore.text.trim(),
-        campaneSpecificheImpianto: _specificheImpianto.text.trim(),
-        campaneNote: _campaneNote.text.trim(),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Scheda parrocchia salvata.')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  Future<void> _elimina(bool audio, Map<String, dynamic> r) async {
+    final conferma = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Eliminare la scheda?'), content: const Text('Questa operazione non può essere annullata.'), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ELIMINA'))]));
+    if (conferma == true) { final db = await DatabaseHelper.instance.database; await db.delete(audio ? 'interventi_audio' : 'interventi_campane', where: 'id = ?', whereArgs: [r['id']]); await _carica(); }
   }
 
-  Future<void> _esportaPdf() async {
-    if (_loading || _saving) return;
-    setState(() => _saving = true);
-    try {
-      // Recupera la scheda dal database per assicurarsi che il PDF contenga
-      // esattamente gli ultimi dati salvati.
-      final clienteId = widget.cliente['id'] as int;
-      final scheda = await DatabaseHelper.instance.getSchedaParrocchia(clienteId);
-      if (scheda == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Salva prima la scheda parrocchia.')),
-        );
-        return;
-      }
-
-      final fontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
-      final boldFontData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
-      final pdf = pw.Document(
-        theme: pw.ThemeData.withFont(
-          base: pw.Font.ttf(fontData),
-          bold: pw.Font.ttf(boldFontData),
-        ),
-      );
-
-      pw.MemoryImage? logo;
-      try {
-        final bytes = await rootBundle.load('assets/logo.png');
-        logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
-      } catch (_) {}
-
-      final gold = PdfColor.fromHex('#B8860B');
-      final lightGold = PdfColor.fromHex('#E8D9A5');
-      final cliente = (widget.cliente['nome'] ?? '').toString().trim();
-      final parrocchia = (widget.cliente['parrocchia'] ?? '').toString().trim();
-      final indirizzo = (widget.cliente['indirizzo'] ?? '').toString().trim();
-      final telefono = (widget.cliente['telefono'] ?? '').toString().trim();
-      final email = (widget.cliente['email'] ?? '').toString().trim();
-      final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
-
-      String v(String key) => (scheda[key] ?? '').toString().trim();
-      String n(String key) => (scheda[key] ?? 0).toString();
-
-      pw.Widget titolo(String text) => pw.Container(
-        width: double.infinity,
-        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: pw.BoxDecoration(
-          color: lightGold,
-          border: pw.Border.all(color: gold),
-        ),
-        child: pw.Text(
-          text,
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: gold),
-        ),
-      );
-
-      pw.Widget riga(String label, String value) {
-        return pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(vertical: 4),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.SizedBox(
-                width: 185,
-                child: pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              ),
-              pw.Expanded(child: pw.Text(value.isEmpty ? '—' : value)),
-            ],
-          ),
-        );
-      }
-
-      final logoImage = logo;
-
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.fromLTRB(32, 30, 32, 30),
-          build: (_) => [
-            pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                if (logoImage != null)
-                  pw.SizedBox(width: 150, height: 90, child: pw.Image(logoImage, fit: pw.BoxFit.contain))
-                else
-                  pw.SizedBox(width: 150, child: pw.Text('GESTIONE IMPIANTI', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: gold))),
-                pw.Expanded(
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text('SCHEDA TECNICA PARROCCHIA', style: pw.TextStyle(fontSize: 17, fontWeight: pw.FontWeight.bold, color: gold)),
-                      pw.SizedBox(height: 5),
-                      pw.Text('Data: $data'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 12),
-            pw.Container(
-              width: double.infinity,
-              padding: const pw.EdgeInsets.all(12),
-              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text('DATI PARROCCHIA', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: gold)),
-                  pw.SizedBox(height: 6),
-                  riga('Parrocchia', parrocchia),
-                  riga('Cliente', cliente),
-                  if (indirizzo.isNotEmpty) riga('Indirizzo', indirizzo),
-                  if (telefono.isNotEmpty) riga('Telefono', telefono),
-                  if (email.isNotEmpty) riga('Email', email),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 16),
-            titolo('IMPIANTO AUDIO'),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
-              child: pw.Column(
-                children: [
-                  riga('Numero diffusori', n('audio_diffusori_numero')),
-                  riga('Marca diffusori', v('audio_diffusori_marca')),
-                  riga('Amplificatore', v('audio_amplificatore_marca')),
-                  riga('Numero microfoni', n('audio_microfoni_numero')),
-                  riga('Marca microfoni', v('audio_microfoni_marca')),
-                  riga('Qualità dell’impianto', v('audio_qualita')),
-                  riga('Note / ultimi interventi', v('audio_note')),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 16),
-            titolo('CAMPANE'),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
-              child: pw.Column(
-                children: [
-                  riga('Numero campane', n('campane_numero')),
-                  riga('Programmatore esistente', v('campane_programmatore')),
-                  riga('Specifiche impianto', v('campane_specifiche_impianto')),
-                  riga('Note / ultimi interventi', v('campane_note')),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 18),
-            pw.Divider(color: lightGold),
-            pw.Text('Scheda tecnica generata dall’app Gestione Preventivi.', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
-          ],
-        ),
-      );
-
-      final pdfBytes = await pdf.save();
-      final safeName = (parrocchia.isEmpty ? cliente : parrocchia)
-          .replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_')
-          .replaceAll(RegExp(r'_+'), '_');
-      final filename = 'Scheda_Parrocchia_${safeName.isEmpty ? 'Senza_Nome' : safeName}.pdf';
-
-      if (Platform.isWindows) {
-        Directory? downloads;
-        try {
-          downloads = await getDownloadsDirectory();
-        } catch (_) {}
-        final directory = downloads ?? await getApplicationDocumentsDirectory();
-        final file = File(p.join(directory.path, filename));
-        await file.writeAsBytes(pdfBytes, flush: true);
-        await Process.run('explorer.exe', [file.path], runInShell: false);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF salvato in: ${file.path}')),
-        );
-      } else {
-        final condiviso = await Printing.sharePdf(bytes: pdfBytes, filename: filename);
-        if (!condiviso) throw Exception('Impossibile aprire la condivisione del PDF.');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Errore nella creazione del PDF: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Widget _numeroField(TextEditingController c, String label, IconData icon) {
-    return TextFormField(
-      controller: c,
-      keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-      ),
-    );
-  }
-
-  Widget _testo(TextEditingController c, String label, IconData icon,
-      {int maxLines = 1}) {
-    return TextFormField(
-      controller: c,
-      maxLines: maxLines,
-      textCapitalization: TextCapitalization.sentences,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        alignLabelWithHint: maxLines > 1,
-      ),
-    );
-  }
-
-  Widget _sezione({
-    required String titolo,
-    required IconData icona,
-    required List<Widget> children,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icona, color: Theme.of(context).colorScheme.primary, size: 28),
-                const SizedBox(width: 10),
-                Text(
-                  titolo,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ...children.expand((w) => [w, const SizedBox(height: 12)]).toList()
-              ..removeLast(),
-          ],
-        ),
-      ),
-    );
+  Widget _lista(bool audio) {
+    final records = audio ? _audio : _campane;
+    return Column(children: [Padding(padding: const EdgeInsets.all(12), child: Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _nuovo(audio), icon: const Icon(Icons.add), label: Text('NUOVA SCHEDA ${audio ? 'AUDIO' : 'CAMPANE'}')))), Expanded(child: records.isEmpty ? Center(child: Text('Nessuna scheda intervento ${audio ? 'audio' : 'campane'} creata.')) : ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 12), itemCount: records.length, itemBuilder: (ctx, i) { final r = records[i]; final d = DateTime.tryParse('${r['data']}'); return Card(child: ListTile(leading: Icon(audio ? Icons.volume_up_outlined : Icons.notifications_none_outlined), title: Text('${r['tipo_intervento']}'), subtitle: Text('Data: ${d == null ? r['data'] : DateFormat('dd/MM/yyyy').format(d)}'), onTap: () => _nuovo(audio, r), trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'edit') _nuovo(audio, r); if (v == 'delete') _elimina(audio, r); }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Modifica')), PopupMenuItem(value: 'delete', child: Text('Elimina'))]))); }))]);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final nome = (widget.cliente['nome'] ?? '').toString();
-    final parrocchia = (widget.cliente['parrocchia'] ?? '').toString().trim();
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scheda Parrocchia'),
-        actions: [
-          IconButton(
-            tooltip: 'Scarica scheda PDF',
-            onPressed: _saving ? null : _esportaPdf,
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-          ),
-          IconButton(
-            tooltip: 'Salva scheda',
-            onPressed: _saving ? null : _salva,
-            icon: const Icon(Icons.save_outlined),
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
-                children: [
-                  Card(
-                    child: ListTile(
-                      leading: const CircleAvatar(child: Icon(Icons.church_outlined)),
-                      title: Text(
-                        parrocchia.isEmpty ? 'Parrocchia non indicata' : parrocchia,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text('Cliente: $nome'),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _sezione(
-                    titolo: 'Impianto Audio',
-                    icona: Icons.volume_up_outlined,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: _numeroField(_diffusoriNumero, 'Numero diffusori', Icons.speaker_group_outlined)),
-                          const SizedBox(width: 12),
-                          Expanded(child: _testo(_diffusoriMarca, 'Marca diffusori', Icons.speaker_outlined)),
-                        ],
-                      ),
-                      _testo(_amplificatoreMarca, 'Marca / modello amplificatore', Icons.graphic_eq_outlined),
-                      Row(
-                        children: [
-                          Expanded(child: _numeroField(_microfoniNumero, 'Numero microfoni', Icons.mic_none_outlined)),
-                          const SizedBox(width: 12),
-                          Expanded(child: _testo(_microfoniMarca, 'Marca microfoni', Icons.mic_outlined)),
-                        ],
-                      ),
-                      _testo(_qualita, 'Qualità dell’impianto', Icons.star_outline),
-                      _testo(
-                        _audioNote,
-                        'Note / ultimi interventi audio',
-                        Icons.notes_outlined,
-                        maxLines: 5,
-                      ),
-                    ],
-                  ),
-                  _sezione(
-                    titolo: 'Campane',
-                    icona: Icons.notifications_none_outlined,
-                    children: [
-                      _numeroField(_campaneNumero, 'Numero campane', Icons.numbers_outlined),
-                      _testo(_programmatore, 'Programmatore esistente', Icons.settings_remote_outlined),
-                      _testo(
-                        _specificheImpianto,
-                        'Specifiche dell’impianto campane',
-                        Icons.settings_outlined,
-                        maxLines: 4,
-                      ),
-                      _testo(
-                        _campaneNote,
-                        'Note / ultimi interventi campane',
-                        Icons.notes_outlined,
-                        maxLines: 5,
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _saving ? null : _salva,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(_saving ? 'SALVATAGGIO...' : 'SALVA SCHEDA'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _saving ? null : _esportaPdf,
-                          icon: const Icon(Icons.picture_as_pdf_outlined),
-                          label: const Text('SCARICA PDF'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Schede intervento'), bottom: TabBar(controller: _tabs, tabs: const [Tab(icon: Icon(Icons.volume_up_outlined), text: 'Interventi audio'), Tab(icon: Icon(Icons.notifications_none_outlined), text: 'Interventi campane')])),
+    body: _loading ? const Center(child: CircularProgressIndicator()) : TabBarView(controller: _tabs, children: [_lista(true), _lista(false)]),
+  );
   @override
-  void dispose() {
-    _diffusoriNumero.dispose();
-    _diffusoriMarca.dispose();
-    _amplificatoreMarca.dispose();
-    _microfoniNumero.dispose();
-    _microfoniMarca.dispose();
-    _qualita.dispose();
-    _audioNote.dispose();
-    _campaneNumero.dispose();
-    _programmatore.dispose();
-    _specificheImpianto.dispose();
-    _campaneNote.dispose();
-    super.dispose();
-  }
+  void dispose() { _tabs.dispose(); super.dispose(); }
 }
 
 class ClientiScreen extends StatefulWidget {
@@ -5948,7 +5587,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                               child: OutlinedButton.icon(
                                 onPressed: () => _apriSchedaParrocchia(c),
                                 icon: const Icon(Icons.church_outlined),
-                                label: const Text('SCHEDA PARROCCHIA • AUDIO E CAMPANE'),
+                                label: const Text('SCHEDE INTERVENTO • AUDIO E CAMPANE'),
                               ),
                             ),
                           ),
