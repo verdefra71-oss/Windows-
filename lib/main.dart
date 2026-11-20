@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2574,47 +2573,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const _DashboardItem(
         Icons.receipt_long_rounded,
         'Nuovo\nPreventivo',
-        const NuovoPreventivoScreen(),
+        NuovoPreventivoScreen(),
       ),
       const _DashboardItem(
         Icons.people_alt_rounded,
         'Clienti',
-        const ClientiScreen(),
+        ClientiScreen(),
       ),
       const _DashboardItem(
         Icons.inventory_2_rounded,
         'Prodotti /\nServizi',
-        const ProdottiScreen(),
+        ProdottiScreen(),
       ),
       const _DashboardItem(
         Icons.list_alt_rounded,
         'Lista\nPreventivi',
-        const ListaPreventiviScreen(),
+        ListaPreventiviScreen(),
       ),
       const _DashboardItem(
         Icons.payments_rounded,
         'Acconti',
-        const AccontiScreen(),
+        AccontiScreen(),
       ),
       const _DashboardItem(
         Icons.receipt_rounded,
         'Fatture',
-        const ListaFattureScreen(),
+        ListaFattureScreen(),
       ),
       const _DashboardItem(
         Icons.request_quote_rounded,
         'Crea\nFattura',
-        const CreaFatturaScreen(),
+        CreaFatturaScreen(),
       ),
       const _DashboardItem(
         Icons.settings_rounded,
         'Gestione\nDati',
-        const BackupScreen(),
+        BackupScreen(),
       ),
       const _DashboardItem(
         Icons.notifications_active_rounded,
         'Notifiche',
-        const NotificheScreen(),
+        NotificheScreen(),
       ),
     ];
 
@@ -5700,7 +5699,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: tipoStruttura,
+                  initialValue: tipoStruttura,
                   decoration: const InputDecoration(
                     labelText: 'Tipo struttura',
                     prefixIcon: Icon(Icons.church_outlined),
