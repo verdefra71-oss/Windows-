@@ -148,6 +148,14 @@ jobs:
           test -f android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           echo "Android launcher icon generated from assets/app_icon.png"
 
+      - name: Verify relation signature asset
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -e
+          test -f assets/signature_bts.png
+          echo "Firma relazione tecnica trovata: assets/signature_bts.png"
+
       - name: Analyze
         working-directory: ${{ env.APP_DIR }}
         run: flutter analyze --no-fatal-infos
