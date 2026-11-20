@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:http/http.dart' as http;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -285,7 +285,7 @@ class DatabaseHelper {
 
     return openDatabase(
       p.join(dbPath, fileName),
-      version: 18,
+      version: 16,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE clienti (
@@ -371,27 +371,6 @@ CREATE TABLE schede_parrocchie (
   campane_note TEXT
 )
 ''');
-        await db.execute('''CREATE TABLE interventi_audio (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL,
-          data TEXT NOT NULL, tipo_intervento TEXT NOT NULL,
-          audio_diffusori_numero INTEGER NOT NULL DEFAULT 0, audio_diffusori_marca TEXT,
-          audio_amplificatore_marca TEXT, audio_microfoni_numero INTEGER NOT NULL DEFAULT 0,
-          audio_microfoni_marca TEXT, audio_qualita TEXT, audio_note TEXT
-        )''');
-        await db.execute('''CREATE TABLE interventi_campane (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL,
-          data TEXT NOT NULL, tipo_intervento TEXT NOT NULL,
-          campane_numero INTEGER NOT NULL DEFAULT 0, campane_programmatore TEXT,
-          campane_specifiche_impianto TEXT, campane_note TEXT
-        )''');
-        await db.execute('''CREATE TABLE schede_intervento_costi (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL,
-          data TEXT NOT NULL, km_andata REAL NOT NULL DEFAULT 0,
-          gasolio_litro REAL NOT NULL DEFAULT 0, consumo_litri_100km REAL NOT NULL DEFAULT 0,
-          intervento TEXT NOT NULL, ricambi TEXT NOT NULL DEFAULT '[]',
-          ore_lavoro REAL NOT NULL DEFAULT 0, tecnici INTEGER NOT NULL DEFAULT 1,
-          costo_orario_tecnico REAL NOT NULL DEFAULT 0
-        )''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 16) {
@@ -485,20 +464,6 @@ CREATE TABLE schede_parrocchie (
   campane_note TEXT
 )
 ''');
-        }
-        if (oldVersion < 17) {
-          await db.execute("CREATE TABLE interventi_audio (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, tipo_intervento TEXT NOT NULL, audio_diffusori_numero INTEGER NOT NULL DEFAULT 0, audio_diffusori_marca TEXT, audio_amplificatore_marca TEXT, audio_microfoni_numero INTEGER NOT NULL DEFAULT 0, audio_microfoni_marca TEXT, audio_qualita TEXT, audio_note TEXT)");
-          await db.execute("CREATE TABLE interventi_campane (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, tipo_intervento TEXT NOT NULL, campane_numero INTEGER NOT NULL DEFAULT 0, campane_programmatore TEXT, campane_specifiche_impianto TEXT, campane_note TEXT)");
-          final legacy = await db.query('schede_parrocchie');
-          final oggi = DateFormat('yyyy-MM-dd').format(DateTime.now());
-          for (final row in legacy) {
-            final cid = row['cliente_id'];
-            await db.insert('interventi_audio', {'cliente_id': cid, 'data': oggi, 'tipo_intervento': 'Storico scheda esistente', 'audio_diffusori_numero': row['audio_diffusori_numero'] ?? 0, 'audio_diffusori_marca': row['audio_diffusori_marca'], 'audio_amplificatore_marca': row['audio_amplificatore_marca'], 'audio_microfoni_numero': row['audio_microfoni_numero'] ?? 0, 'audio_microfoni_marca': row['audio_microfoni_marca'], 'audio_qualita': row['audio_qualita'], 'audio_note': row['audio_note']});
-            await db.insert('interventi_campane', {'cliente_id': cid, 'data': oggi, 'tipo_intervento': 'Storico scheda esistente', 'campane_numero': row['campane_numero'] ?? 0, 'campane_programmatore': row['campane_programmatore'], 'campane_specifiche_impianto': row['campane_specifiche_impianto'], 'campane_note': row['campane_note']});
-          }
-        }
-        if (oldVersion < 18) {
-          await db.execute("CREATE TABLE schede_intervento_costi (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER NOT NULL, data TEXT NOT NULL, km_andata REAL NOT NULL DEFAULT 0, gasolio_litro REAL NOT NULL DEFAULT 0, consumo_litri_100km REAL NOT NULL DEFAULT 0, intervento TEXT NOT NULL, ricambi TEXT NOT NULL DEFAULT '[]', ore_lavoro REAL NOT NULL DEFAULT 0, tecnici INTEGER NOT NULL DEFAULT 1, costo_orario_tecnico REAL NOT NULL DEFAULT 0)");
         }
       },
     );
@@ -880,9 +845,6 @@ CREATE TABLE schede_parrocchie (
       'preventivi': await db.query('preventivi'),
       'fatture': await db.query('fatture'),
       'schede_parrocchie': await db.query('schede_parrocchie'),
-      'interventi_audio': await db.query('interventi_audio'),
-      'interventi_campane': await db.query('interventi_campane'),
-      'schede_intervento_costi': await db.query('schede_intervento_costi'),
       'acconti': await getAcconti(),
     };
   }
@@ -927,9 +889,6 @@ CREATE TABLE schede_parrocchie (
     final preventivi = rowsFor('preventivi');
     final fatture = rowsFor('fatture');
     final schede = rowsFor('schede_parrocchie');
-    final interventiAudio = rowsFor('interventi_audio');
-    final interventiCampane = rowsFor('interventi_campane');
-    final schedeInterventoCosti = rowsFor('schede_intervento_costi');
     final db = await database;
 
     // MERGE conservativo: non elimina e non aggiorna mai una riga locale.
@@ -1018,23 +977,6 @@ CREATE TABLE schede_parrocchie (
           ..['cliente_id'] = mappedId;
         await insertRow('schede_parrocchie', row);
         schedeKeys.add(key);
-      }
-      for (final row in [...interventiAudio, ...interventiCampane]) {
-        final rawClienteId = row['cliente_id'];
-        final oldClienteId = rawClienteId is num ? rawClienteId.toInt() : int.tryParse('$rawClienteId');
-        final mappedId = oldClienteId == null ? null : clienteIdMap[oldClienteId];
-        if (mappedId == null) continue;
-        final table = interventiAudio.contains(row) ? 'interventi_audio' : 'interventi_campane';
-        final copy = Map<String, dynamic>.from(row)..['cliente_id'] = mappedId;
-        await insertRow(table, copy);
-      }
-      for (final row in schedeInterventoCosti) {
-        final rawClienteId = row['cliente_id'];
-        final oldClienteId = rawClienteId is num ? rawClienteId.toInt() : int.tryParse('$rawClienteId');
-        final mappedId = oldClienteId == null ? null : clienteIdMap[oldClienteId];
-        if (mappedId == null) continue;
-        final copy = Map<String, dynamic>.from(row)..['cliente_id'] = mappedId;
-        await insertRow('schede_intervento_costi', copy);
       }
     });
     await createAutomaticBackup();
@@ -1621,6 +1563,161 @@ class PdfGenerator {
     if (!condiviso) {
       throw Exception('PDF creato, ma la condivisione non è stata aperta.');
     }
+  }
+
+
+  static Future<void> generaRelazioneTecnica({
+    required String numero,
+    required String cliente,
+    required String dataPreventivo,
+    required DateTime dataEvento,
+    required List<Map<String, dynamic>> articoli,
+  }) async {
+    final fontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
+    final boldFontData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: pw.Font.ttf(fontData),
+        bold: pw.Font.ttf(boldFontData),
+      ),
+    );
+    final logoData = await rootBundle.load('assets/logo.png');
+    final logo = pw.MemoryImage(Uint8List.fromList(logoData.buffer.asUint8List()));
+    final firmaData = await rootBundle.load('assets/signature_bts.png');
+    final firma = pw.MemoryImage(Uint8List.fromList(firmaData.buffer.asUint8List()));
+
+    Map<String, dynamic>? datiCliente;
+    try {
+      final clienti = await DatabaseHelper.instance.getClienti();
+      final matches = clienti.where(
+        (c) => (c['nome'] ?? '').toString().trim() == cliente.trim(),
+      );
+      if (matches.isNotEmpty) datiCliente = Map<String, dynamic>.from(matches.first);
+    } catch (_) {}
+
+    String val(String key) => (datiCliente?[key] ?? '').toString().trim();
+    final indirizzo = [
+      val('indirizzo'),
+      val('cap'),
+      val('citta'),
+      val('provincia'),
+    ].where((s) => s.isNotEmpty).join(' – ');
+    final dataPrev = DateTime.tryParse(dataPreventivo) ?? DateTime.now();
+    final dataPrevTxt = DateFormat('dd/MM/yyyy').format(dataPrev);
+    final dataEventoTxt = DateFormat('dd/MM/yyyy').format(dataEvento);
+    final righe = articoli.where((a) {
+      final nome = (a['nome'] ?? '').toString();
+      final low = nome.toLowerCase();
+      return !low.contains('installazione') && !low.contains('collaudo');
+    }).toList();
+
+    final gold = PdfColor.fromHex('#B8860B');
+    final clientAddress = [
+      cliente,
+      indirizzo,
+    ].where((s) => s.isNotEmpty).join('\n');
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(34, 32, 34, 30),
+        build: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(child: pw.Image(logo, height: 62, alignment: pw.Alignment.centerLeft)),
+                pw.SizedBox(width: 14),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('RIFERIMENTO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    pw.Text('Preventivo n. $numero', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('Data preventivo e sopralluogo: $dataPrevTxt', style: const pw.TextStyle(fontSize: 9)),
+                  ],
+                ),
+              ],
+            ),
+            pw.Divider(color: gold, thickness: 1.2),
+            pw.SizedBox(height: 8),
+            pw.Center(child: pw.Text('RELAZIONE TECNICA', style: pw.TextStyle(fontSize: 19, fontWeight: pw.FontWeight.bold))),
+            pw.SizedBox(height: 3),
+            pw.Center(child: pw.Text('Descrizione dei danni alle apparecchiature', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700))),
+            pw.SizedBox(height: 14),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              color: PdfColor.fromHex('#F3F1EB'),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    pw.Text('COMMITTENTE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(clientAddress, style: const pw.TextStyle(fontSize: 9)),
+                  ])),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    pw.Text('EVENTO SEGNALATO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    pw.SizedBox(height: 4),
+                    pw.Text('Evento atmosferico con fulmini\n$dataEventoTxt', style: const pw.TextStyle(fontSize: 9)),
+                  ])),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Text('1. Premessa e descrizione dell’evento', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: gold)),
+            pw.SizedBox(height: 4),
+            pw.Text('Il committente segnala che, in data $dataEventoTxt, il territorio è stato interessato da un evento atmosferico. In concomitanza con tale evento si è verificato il danneggiamento di componenti delle apparecchiature e degli impianti indicati nel presente documento.', style: const pw.TextStyle(fontSize: 9.5), textAlign: pw.TextAlign.justify),
+            pw.SizedBox(height: 10),
+            pw.Text('2. Sopralluogo e riscontri', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: gold)),
+            pw.SizedBox(height: 4),
+            pw.Text('La ditta B.T.S. – Bells & Technology Systems, di Carpentieri Alfonso, ha effettuato il sopralluogo tecnico in data $dataPrevTxt. Sulla base delle verifiche effettuate e delle necessità di ripristino indicate nel preventivo n. $numero, risultano interessati i seguenti componenti:', style: const pw.TextStyle(fontSize: 9.5), textAlign: pw.TextAlign.justify),
+            pw.SizedBox(height: 7),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColor.fromHex('#D7D2C5'), width: .5),
+              columnWidths: {0: const pw.FlexColumnWidth(5), 1: const pw.FlexColumnWidth(1)},
+              children: [
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: gold),
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Componente / intervento', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Quantità', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                  ],
+                ),
+                ...righe.map((a) => pw.TableRow(children: [
+                  pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text((a['nome'] ?? '').toString(), style: const pw.TextStyle(fontSize: 9))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Center(child: pw.Text('${a['quantita'] ?? 1}', style: const pw.TextStyle(fontSize: 9)))),
+                ])),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Text('3. Considerazioni tecniche e finalità della relazione', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: gold)),
+            pw.SizedBox(height: 4),
+            pw.Text('La tipologia dei componenti per i quali è previsto il ripristino riguarda la gestione e il funzionamento delle apparecchiature e degli impianti del committente. Il danneggiamento è stato segnalato in seguito all’evento atmosferico sopra descritto. La presente relazione viene redatta unitamente al preventivo n. $numero del $dataPrevTxt, per documentare i danni e gli interventi necessari ai fini della richiesta di valutazione del sinistro da parte della compagnia assicurativa.', style: const pw.TextStyle(fontSize: 9.5), textAlign: pw.TextAlign.justify),
+            pw.Spacer(),
+            pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+              pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                pw.Text('Luogo e data', style: const pw.TextStyle(fontSize: 9)),
+                pw.Text('Salerno, $dataPrevTxt', style: const pw.TextStyle(fontSize: 9)),
+              ])),
+              pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
+                pw.Text('Il tecnico / La ditta', style: const pw.TextStyle(fontSize: 9)),
+                pw.SizedBox(height: 2),
+                pw.Image(firma, width: 125, height: 48, fit: pw.BoxFit.contain),
+              ])),
+            ]),
+            pw.SizedBox(height: 8),
+            pw.Divider(color: PdfColors.grey300),
+            pw.Text('B.T.S. – Bells & Technology Systems | Relazione tecnica', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+          ],
+        ),
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final safe = numero.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    await Printing.sharePdf(bytes: bytes, filename: 'Relazione_Tecnica_$safe.pdf');
   }
 
 }
@@ -2483,11 +2580,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.people_alt_rounded,
         'Clienti',
         const ClientiScreen(),
-      ),
-      const _DashboardItem(
-        Icons.handyman_rounded,
-        'Schede\nIntervento',
-        const SchedeInterventoCostiScreen(),
       ),
       const _DashboardItem(
         Icons.inventory_2_rounded,
@@ -3893,7 +3985,10 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 9),
-                      child: ListTile(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ListTile(
                         onTap: () => _mostraDettagli(x),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -3952,6 +4047,44 @@ class _ListaPreventiviScreenState extends State<ListaPreventiviScreen> {
                             ),
                           ],
                         ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.description_outlined),
+                                label: const Text('CREA RELAZIONE TECNICA'),
+                                onPressed: () async {
+                                  final evento = await showDatePicker(
+                                    context: context,
+                                    initialDate: DateTime.now(),
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime(2100),
+                                    helpText: 'Data dell’evento atmosferico',
+                                    cancelText: 'ANNULLA',
+                                    confirmText: 'CONFERMA',
+                                  );
+                                  if (evento == null || !context.mounted) return;
+                                  try {
+                                    await PdfGenerator.generaRelazioneTecnica(
+                                      numero: (x['numero'] ?? '').toString(),
+                                      cliente: (x['cliente'] ?? '').toString(),
+                                      dataPreventivo: (x['data'] ?? '').toString(),
+                                      dataEvento: evento,
+                                      articoli: _articoliDaPreventivo(x),
+                                    );
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Errore nella creazione della relazione: $e')),
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }),
@@ -4903,255 +5036,479 @@ Future<void> aggiungiAcconto() async {
 }
 
 
-
-class SchedeInterventoCostiScreen extends StatefulWidget {
-  const SchedeInterventoCostiScreen({super.key});
-  @override
-  State<SchedeInterventoCostiScreen> createState() => _SchedeInterventoCostiScreenState();
-}
-
-class _SchedeInterventoCostiScreenState extends State<SchedeInterventoCostiScreen> {
-  List<Map<String, dynamic>> _records = [];
-  List<Map<String, dynamic>> _clienti = [];
-  bool _loading = true;
-
-  @override
-  void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    final db = await DatabaseHelper.instance.database;
-    final results = await Future.wait([
-      db.query('schede_intervento_costi', orderBy: 'data DESC, id DESC'),
-      DatabaseHelper.instance.getClienti(),
-    ]);
-    if (mounted) setState(() { _records = results[0]; _clienti = results[1]; _loading = false; });
-  }
-
-  double _n(dynamic v) => (v as num?)?.toDouble() ?? 0;
-  double _fuel(Map<String, dynamic> r) => _n(r['gasolio_litro']);
-  double _labor(Map<String, dynamic> r) => _n(r['ore_lavoro']) * _n(r['tecnici']) * _n(r['costo_orario_tecnico']);
-  double _parts(Map<String, dynamic> r) {
-    try { final rows = jsonDecode('${r['ricambi'] ?? '[]'}') as List; return rows.fold<double>(0, (v, x) => v + (_n(x['quantita']) * _n(x['prezzo']))); } catch (_) { return 0; }
-  }
-
-  Future<double?> _calcolaDistanza(String indirizzo) async {
-    final geo = await http.get(Uri.https('nominatim.openstreetmap.org', '/search', {'q': '$indirizzo, Italia', 'format': 'json', 'limit': '1'}), headers: {'User-Agent': 'PreventiviInterventi/1.3'});
-    if (geo.statusCode != 200) return null;
-    final results = jsonDecode(geo.body) as List;
-    if (results.isEmpty) return null;
-    final dest = results.first;
-    final originResponse = await http.get(
-      Uri.https('nominatim.openstreetmap.org', '/search', {'q': 'Via Ugo Pirro 9, Salerno, Italia', 'format': 'json', 'limit': '1'}),
-      headers: {'User-Agent': 'PreventiviInterventi/1.3'},
-    );
-    if (originResponse.statusCode != 200) return null;
-    final origins = jsonDecode(originResponse.body) as List;
-    if (origins.isEmpty) return null;
-    final origin = origins.first;
-    final origineLat = double.parse('${origin['lat']}');
-    final origineLon = double.parse('${origin['lon']}');
-    final lat = double.parse('${dest['lat']}');
-    final lon = double.parse('${dest['lon']}');
-    final route = await http.get(Uri.parse('https://router.project-osrm.org/route/v1/driving/$origineLon,$origineLat;$lon,$lat?overview=false'));
-    if (route.statusCode != 200) return null;
-    final data = jsonDecode(route.body) as Map<String, dynamic>;
-    if (data['code'] != 'Ok' || (data['routes'] as List).isEmpty) return null;
-    return (((data['routes'] as List).first['distance'] as num).toDouble()) / 1000;
-  }
-
-  Future<void> _newSheet() async {
-    Map<String, dynamic>? clienteSelezionato;
-    DateTime data = DateTime.now();
-    final nome = TextEditingController();
-    final parrocchia = TextEditingController();
-    final indirizzo = TextEditingController();
-    final comune = TextEditingController();
-    final km = TextEditingController();
-    final gasolio = TextEditingController();
-    final intervento = TextEditingController();
-    final ore = TextEditingController();
-    final tecnici = TextEditingController(text: '1');
-    final costoOra = TextEditingController();
-    final parts = <Map<String, TextEditingController>>[];
-    bool manuale = false;
-    bool calcoloKm = false;
-    void addPart() => parts.add({'nome': TextEditingController(), 'quantita': TextEditingController(text: '1'), 'prezzo': TextEditingController()});
-    addPart();
-    final formKey = GlobalKey<FormState>();
-
-    Future<void> scegliCliente(BuildContext dialogContext, StateSetter setDialog) async {
-      final ricerca = TextEditingController();
-      final scelto = await showDialog<Map<String, dynamic>>(context: dialogContext, builder: (searchCtx) => StatefulBuilder(builder: (searchCtx, setSearch) {
-        final filtrati = _clienti.where((c) => '${c['nome'] ?? ''} ${c['parrocchia'] ?? ''} ${c['paese'] ?? ''} ${c['indirizzo'] ?? ''}'.toLowerCase().contains(ricerca.text.toLowerCase())).toList();
-        return AlertDialog(title: const Text('Cerca nella sezione Clienti'), content: SizedBox(width: 520, height: 420, child: Column(children: [
-          TextField(controller: ricerca, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Cerca parrocchia o cliente'), onChanged: (_) => setSearch(() {})),
-          const SizedBox(height: 8), Expanded(child: filtrati.isEmpty ? const Center(child: Text('Nessun cliente trovato')) : ListView.builder(itemCount: filtrati.length, itemBuilder: (_, i) { final c = filtrati[i]; return ListTile(title: Text('${c['parrocchia']?.toString().trim().isNotEmpty == true ? c['parrocchia'] : c['nome']}'), subtitle: Text('${c['indirizzo'] ?? ''} ${c['paese'] ?? ''}'), onTap: () => Navigator.pop(searchCtx, c)); })),
-        ])), actions: [TextButton(onPressed: () => Navigator.pop(searchCtx), child: const Text('ANNULLA'))]);
-      }));
-      if (scelto != null) {
-        setDialog(() { clienteSelezionato = scelto; manuale = false; nome.text = '${scelto['nome'] ?? ''}'; parrocchia.text = '${scelto['parrocchia'] ?? ''}'; indirizzo.text = '${scelto['indirizzo'] ?? ''}'; comune.text = '${scelto['paese'] ?? ''}'; km.clear(); });
-        final addr = '${scelto['indirizzo'] ?? ''}, ${scelto['cap'] ?? ''} ${scelto['paese'] ?? ''}';
-        if (addr.trim().isNotEmpty) {
-          setDialog(() => calcoloKm = true);
-          try { final d = await _calcolaDistanza(addr); if (d != null) setDialog(() => km.text = d.toStringAsFixed(1)); } catch (_) {}
-          setDialog(() => calcoloKm = false);
-        }
-      }
-    }
-
-    final saved = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) {
-      Widget field(TextEditingController c, String label, {bool decimal = false, int lines = 1, bool required = true, void Function(String)? onChanged}) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(controller: c, onChanged: onChanged, keyboardType: decimal ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text, maxLines: lines, decoration: InputDecoration(labelText: label), validator: (v) => required && (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null));
-      return AlertDialog(title: const Text('Nuova scheda intervento'), content: SizedBox(width: 560, child: SingleChildScrollView(child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('DATI PARROCCHIA / CLIENTE', style: TextStyle(fontWeight: FontWeight.bold)),
-        Row(children: [Expanded(child: OutlinedButton.icon(onPressed: () => scegliCliente(ctx, setDialog), icon: const Icon(Icons.people_outline), label: const Text('Cerca nella sezione Clienti'))), const SizedBox(width: 8), TextButton(onPressed: () => setDialog(() { clienteSelezionato = null; manuale = true; nome.clear(); parrocchia.clear(); indirizzo.clear(); comune.clear(); km.clear(); }), child: const Text('Inserisci manualmente'))]),
-        if (clienteSelezionato != null && !manuale) Card(child: ListTile(leading: const Icon(Icons.business), title: Text(parrocchia.text.isNotEmpty ? parrocchia.text : nome.text), subtitle: Text('${indirizzo.text}, ${comune.text}'), trailing: IconButton(icon: const Icon(Icons.edit), onPressed: () => setDialog(() { clienteSelezionato = null; manuale = true; })))),
-        if (manuale || clienteSelezionato == null) ...[field(nome, 'Nome referente / cliente'), field(parrocchia, 'Nome parrocchia / struttura', required: false), field(indirizzo, 'Indirizzo completo (via e numero civico)', onChanged: (_) => setDialog(() {})), field(comune, 'Comune / località', onChanged: (_) => setDialog(() {}))],
-        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.calendar_today), title: const Text('Data intervento'), subtitle: Text(DateFormat('dd/MM/yyyy').format(data)), onTap: () async { final d = await showDatePicker(context: ctx, initialDate: data, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setDialog(() => data = d); }),
-        const Divider(), const Text('TRASFERIMENTO E CARBURANTE', style: TextStyle(fontWeight: FontWeight.bold)),
-        Row(children: [Expanded(child: Text('Distanza calcolata automaticamente: ${km.text.isEmpty ? '—' : '${km.text} km sola andata'}')), if (calcoloKm) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))]),
-        if (km.text.isEmpty && (clienteSelezionato != null || indirizzo.text.trim().isNotEmpty)) Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: calcoloKm ? null : () async { setDialog(() => calcoloKm = true); try { final d = await _calcolaDistanza('${indirizzo.text}, ${comune.text}'); if (d != null) setDialog(() => km.text = d.toStringAsFixed(1)); else if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Indirizzo non trovato: verifica via, numero civico e comune.'))); } catch (_) { if (ctx.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossibile calcolare il percorso. Verifica la connessione.'))); } setDialog(() => calcoloKm = false); }, icon: const Icon(Icons.route), label: const Text('Calcola distanza'))),
-        field(gasolio, 'Costo gasolio complessivo andata e ritorno (€)', decimal: true),
-        const Text('Inserisci il costo effettivo del carburante per l’intero viaggio A/R. Non viene richiesto il consumo medio.', style: TextStyle(fontSize: 12, color: Colors.black54)),
-        const Divider(), const Text('INTERVENTO E RICAMBI', style: TextStyle(fontWeight: FontWeight.bold)), field(intervento, 'Descrizione dell’intervento effettuato', lines: 4),
-        ...List.generate(parts.length, (i) => Card(margin: const EdgeInsets.only(top: 6, bottom: 8), child: Padding(padding: const EdgeInsets.all(10), child: Column(children: [Row(children: [Expanded(child: Text('Pezzo sostituito ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold))), IconButton(onPressed: parts.length == 1 ? null : () => setDialog(() => parts.removeAt(i)), icon: const Icon(Icons.delete_outline))]), TextFormField(controller: parts[i]['nome'], decoration: const InputDecoration(labelText: 'Descrizione pezzo')), const SizedBox(height: 8), Row(children: [Expanded(child: TextFormField(controller: parts[i]['quantita'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Numero / quantità'))), const SizedBox(width: 8), Expanded(child: TextFormField(controller: parts[i]['prezzo'], keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Costo unitario (€)')))])])))),
-        Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => setDialog(() => addPart()), icon: const Icon(Icons.add), label: const Text('Aggiungi pezzo'))),
-        const Divider(), const Text('MANODOPERA', style: TextStyle(fontWeight: FontWeight.bold)), field(ore, 'Ore impiegate per tecnico', decimal: true), field(tecnici, 'Numero tecnici presenti'), field(costoOra, 'Costo orario per tecnico (€)', decimal: true),
-      ])))), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton.icon(onPressed: () { if (!formKey.currentState!.validate()) return; if (km.text.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Calcola prima la distanza dall’indirizzo del cliente.'))); return; } Navigator.pop(ctx, true); }, icon: const Icon(Icons.save), label: const Text('SALVA E CREA PDF'))]);
-    }));
-
-    if (saved == true) {
-      final db = await DatabaseHelper.instance.database;
-      int clienteId; Map<String, dynamic> cliente;
-      if (clienteSelezionato != null) { cliente = clienteSelezionato!; clienteId = cliente['id'] as int; }
-      else { clienteId = await db.insert('clienti', {'nome': nome.text.trim(), 'parrocchia': parrocchia.text.trim(), 'indirizzo': indirizzo.text.trim(), 'paese': comune.text.trim(), 'tipo_struttura': 'Parrocchia'}); cliente = {'id': clienteId, 'nome': nome.text.trim(), 'parrocchia': parrocchia.text.trim(), 'indirizzo': indirizzo.text.trim(), 'paese': comune.text.trim()}; }
-      final ricambi = parts.where((x) => x['nome']!.text.trim().isNotEmpty).map((x) => {'nome': x['nome']!.text.trim(), 'quantita': double.tryParse(x['quantita']!.text.replaceAll(',', '.')) ?? 0, 'prezzo': double.tryParse(x['prezzo']!.text.replaceAll(',', '.')) ?? 0}).toList();
-      final values = {'cliente_id': clienteId, 'data': DateFormat('yyyy-MM-dd').format(data), 'km_andata': double.tryParse(km.text.replaceAll(',', '.')) ?? 0, 'gasolio_litro': double.tryParse(gasolio.text.replaceAll(',', '.')) ?? 0, 'consumo_litri_100km': 0, 'intervento': intervento.text.trim(), 'ricambi': jsonEncode(ricambi), 'ore_lavoro': double.tryParse(ore.text.replaceAll(',', '.')) ?? 0, 'tecnici': int.tryParse(tecnici.text) ?? 1, 'costo_orario_tecnico': double.tryParse(costoOra.text.replaceAll(',', '.')) ?? 0};
-      final id = await db.insert('schede_intervento_costi', values); await DatabaseHelper.instance.autoBackup(); await _createPdf({...values, 'id': id}, cliente); await _load();
-    }
-    for (final c in [nome, parrocchia, indirizzo, comune, km, gasolio, intervento, ore, tecnici, costoOra]) { c.dispose(); }
-    for (final row in parts) { for (final c in row.values) { c.dispose(); } }
-  }
-
-  Future<void> _createPdf(Map<String, dynamic> r, Map<String, dynamic> c) async {
-    final fontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
-    final boldData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
-    final pdf = pw.Document(theme: pw.ThemeData.withFont(base: pw.Font.ttf(fontData), bold: pw.Font.ttf(boldData)));
-    final kmTot = _n(r['km_andata']) * 2;
-    final fuel = _fuel(r); final labor = _labor(r); final partsCost = _parts(r); final total = fuel + labor + partsCost;
-    List<dynamic> ricambi = []; try { ricambi = jsonDecode('${r['ricambi'] ?? '[]'}') as List; } catch (_) {}
-    pdf.addPage(pw.MultiPage(pageFormat: PdfPageFormat.a4, build: (_) => [
-      pw.Text('SCHEDA INTERVENTO', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
-      pw.SizedBox(height: 8), pw.Text('Data: ${DateFormat('dd/MM/yyyy').format(DateTime.parse('${r['data']}'))}'),
-      pw.Divider(), pw.Text('DATI PARROCCHIA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-      pw.Text('Struttura: ${c['parrocchia'] ?? c['nome'] ?? ''}'), pw.Text('Referente: ${c['nome'] ?? ''}'),
-      pw.Text('Indirizzo: ${c['indirizzo'] ?? ''}'), pw.Text('Comune: ${c['paese'] ?? ''}'), pw.Text('Telefono: ${c['telefono'] ?? ''}'),
-      pw.SizedBox(height: 12), pw.Text('INTERVENTO EFFETTUATO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), pw.Text('${r['intervento']}'),
-      pw.SizedBox(height: 12), pw.Text('TRASFERIMENTO E CARBURANTE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-      pw.Text('Partenza: Via Ugo Pirro 9, Salerno'), pw.Text('Distanza andata: ${_n(r['km_andata']).toStringAsFixed(1)} km — A/R: ${kmTot.toStringAsFixed(1)} km'),
-      pw.Text('Costo gasolio (andata e ritorno): € ${fuel.toStringAsFixed(2)}'),
-      pw.SizedBox(height: 12), pw.Text('PEZZI SOSTITUITI', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-      if (ricambi.isEmpty) pw.Text('Nessun pezzo indicato') else pw.Table.fromTextArray(headers: ['Pezzo', 'Quantità', 'Costo unitario', 'Totale'], data: ricambi.map((x) => [ '${x['nome']}', '${_n(x['quantita']).toStringAsFixed(0)}', '€ ${_n(x['prezzo']).toStringAsFixed(2)}', '€ ${(_n(x['quantita']) * _n(x['prezzo'])).toStringAsFixed(2)}' ]).toList()),
-      pw.SizedBox(height: 12), pw.Text('MANODOPERA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-      pw.Text('Ore per tecnico: ${_n(r['ore_lavoro']).toStringAsFixed(2)} — Tecnici presenti: ${r['tecnici']}'),
-      pw.Text('Costo orario per tecnico: € ${_n(r['costo_orario_tecnico']).toStringAsFixed(2)} — Costo manodopera: € ${labor.toStringAsFixed(2)}'),
-      pw.Divider(), pw.Align(alignment: pw.Alignment.centerRight, child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [pw.Text('Gasolio A/R: € ${fuel.toStringAsFixed(2)}'), pw.Text('Ricambi: € ${partsCost.toStringAsFixed(2)}'), pw.Text('Manodopera: € ${labor.toStringAsFixed(2)}'), pw.SizedBox(height: 6), pw.Text('TOTALE INTERVENTO: € ${total.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))])),
-    ]));
-    await Printing.sharePdf(bytes: await pdf.save(), filename: 'Scheda_intervento_${r['id']}.pdf');
-  }
-
-  Future<void> _delete(Map<String, dynamic> r) async {
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Eliminare la scheda?'), content: const Text('La scheda e i relativi dati saranno eliminati.'), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina'))]));
-    if (ok == true) { final db = await DatabaseHelper.instance.database; await db.delete('schede_intervento_costi', where: 'id = ?', whereArgs: [r['id']]); await DatabaseHelper.instance.autoBackup(); await _load(); }
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Schede intervento')),
-    floatingActionButton: FloatingActionButton.extended(onPressed: _newSheet, icon: const Icon(Icons.add), label: const Text('Nuova scheda')),
-    body: _loading ? const Center(child: CircularProgressIndicator()) : _records.isEmpty ? const Center(child: Text('Nessuna scheda intervento creata.')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: _records.length, itemBuilder: (ctx, i) {
-      final r = _records[i]; final matches = _clienti.where((x) => x['id'] == r['cliente_id']).toList(); final c = matches.isEmpty ? null : matches.first;
-      final nome = c == null ? 'Parrocchia non disponibile' : (c['parrocchia']?.toString().trim().isNotEmpty == true ? c['parrocchia'] : c['nome']);
-      final d = DateTime.tryParse('${r['data']}'); final total = _fuel(r) + _labor(r) + _parts(r);
-      return Card(child: ListTile(leading: const Icon(Icons.handyman_outlined), title: Text('$nome'), subtitle: Text('${d == null ? r['data'] : DateFormat('dd/MM/yyyy').format(d)} • Totale € ${total.toStringAsFixed(2)}'), trailing: PopupMenuButton<String>(onSelected: (v) async { if (v == 'pdf' && c != null) await _createPdf(r, c); if (v == 'delete') await _delete(r); }, itemBuilder: (_) => const [PopupMenuItem(value: 'pdf', child: Text('Crea / condividi PDF')), PopupMenuItem(value: 'delete', child: Text('Elimina'))])));
-    }),
-  );
-}
-
 class SchedaParrocchiaScreen extends StatefulWidget {
   final Map<String, dynamic> cliente;
-  const SchedaParrocchiaScreen({super.key, required this.cliente});
+
+  const SchedaParrocchiaScreen({
+    super.key,
+    required this.cliente,
+  });
+
   @override
   State<SchedaParrocchiaScreen> createState() => _SchedaParrocchiaScreenState();
 }
 
-class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
-  List<Map<String, dynamic>> _audio = [];
-  List<Map<String, dynamic>> _campane = [];
+class _SchedaParrocchiaScreenState extends State<SchedaParrocchiaScreen> {
+  final _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _diffusoriNumero;
+  late final TextEditingController _diffusoriMarca;
+  late final TextEditingController _amplificatoreMarca;
+  late final TextEditingController _microfoniNumero;
+  late final TextEditingController _microfoniMarca;
+  late final TextEditingController _qualita;
+  late final TextEditingController _audioNote;
+
+  late final TextEditingController _campaneNumero;
+  late final TextEditingController _programmatore;
+  late final TextEditingController _specificheImpianto;
+  late final TextEditingController _campaneNote;
+
   bool _loading = true;
-  int get _clienteId => widget.cliente['id'] as int;
+  bool _saving = false;
 
   @override
-  void initState() { super.initState(); _tabs = TabController(length: 2, vsync: this); _carica(); }
+  void initState() {
+    super.initState();
+    _diffusoriNumero = TextEditingController(text: '0');
+    _diffusoriMarca = TextEditingController();
+    _amplificatoreMarca = TextEditingController();
+    _microfoniNumero = TextEditingController(text: '0');
+    _microfoniMarca = TextEditingController();
+    _qualita = TextEditingController();
+    _audioNote = TextEditingController();
+    _campaneNumero = TextEditingController(text: '0');
+    _programmatore = TextEditingController();
+    _specificheImpianto = TextEditingController();
+    _campaneNote = TextEditingController();
+    _carica();
+  }
 
   Future<void> _carica() async {
-    final db = await DatabaseHelper.instance.database;
-    final a = await db.query('interventi_audio', where: 'cliente_id = ?', whereArgs: [_clienteId], orderBy: 'data DESC, id DESC');
-    final c = await db.query('interventi_campane', where: 'cliente_id = ?', whereArgs: [_clienteId], orderBy: 'data DESC, id DESC');
-    if (mounted) setState(() { _audio = a; _campane = c; _loading = false; });
-  }
-
-  Future<void> _nuovo(bool audio, [Map<String, dynamic>? record]) async {
-    final fields = audio
-      ? <String>['audio_diffusori_numero','audio_diffusori_marca','audio_amplificatore_marca','audio_microfoni_numero','audio_microfoni_marca','audio_qualita','audio_note']
-      : <String>['campane_numero','campane_programmatore','campane_specifiche_impianto','campane_note'];
-    final labels = <String, String>{
-      'audio_diffusori_numero':'Numero diffusori','audio_diffusori_marca':'Marca diffusori','audio_amplificatore_marca':'Marca / modello amplificatore','audio_microfoni_numero':'Numero microfoni','audio_microfoni_marca':'Marca microfoni','audio_qualita':'Qualità dell’impianto','audio_note':'Note / ultimi interventi audio',
-      'campane_numero':'Numero campane','campane_programmatore':'Programmatore esistente','campane_specifiche_impianto':'Specifiche dell’impianto campane','campane_note':'Note / ultimi interventi campane'};
-    final controllers = <String, TextEditingController>{};
-    for (final f in fields) { controllers[f] = TextEditingController(text: '${record?[f] ?? (f.endsWith('_numero') ? 0 : '')}'); }
-    DateTime selected = DateTime.tryParse('${record?['data'] ?? ''}') ?? DateTime.now();
-    final tipo = TextEditingController(text: '${record?['tipo_intervento'] ?? ''}');
-    final formKey = GlobalKey<FormState>();
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
-      title: Text('${record == null ? 'Nuova' : 'Modifica'} scheda intervento ${audio ? 'audio' : 'campane'}'),
-      content: SizedBox(width: 520, child: SingleChildScrollView(child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.calendar_today), title: const Text('Data intervento'), subtitle: Text(DateFormat('dd/MM/yyyy').format(selected)), onTap: () async { final d = await showDatePicker(context: ctx, initialDate: selected, firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setDialog(() => selected = d); }),
-        TextFormField(controller: tipo, decoration: const InputDecoration(labelText: 'Tipo di intervento'), validator: (v) => v == null || v.trim().isEmpty ? 'Inserisci il tipo di intervento' : null),
-        const SizedBox(height: 12),
-        ...fields.map((f) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextFormField(controller: controllers[f], keyboardType: f.endsWith('_numero') ? TextInputType.number : TextInputType.text, maxLines: f.endsWith('_note') || f.contains('specifiche') ? 4 : 1, decoration: InputDecoration(labelText: labels[f], prefixIcon: Icon(f.endsWith('_numero') ? Icons.numbers : Icons.edit_note))))),
-      ])))),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(ctx, true); }, child: const Text('SALVA'))],
-    )));
-    if (ok == true) {
-      final values = <String, dynamic>{'cliente_id': _clienteId, 'data': DateFormat('yyyy-MM-dd').format(selected), 'tipo_intervento': tipo.text.trim()};
-      for (final f in fields) { values[f] = f.endsWith('_numero') ? (int.tryParse(controllers[f]!.text.trim()) ?? 0) : controllers[f]!.text.trim(); }
-      final db = await DatabaseHelper.instance.database;
-      final table = audio ? 'interventi_audio' : 'interventi_campane';
-      if (record == null) { await db.insert(table, values); } else { await db.update(table, values, where: 'id = ?', whereArgs: [record['id']]); }
-      await DatabaseHelper.instance.autoBackup();
-      await _carica();
+    final id = widget.cliente['id'] as int;
+    final s = await DatabaseHelper.instance.getSchedaParrocchia(id);
+    if (s != null) {
+      _diffusoriNumero.text = '${s['audio_diffusori_numero'] ?? 0}';
+      _diffusoriMarca.text = '${s['audio_diffusori_marca'] ?? ''}';
+      _amplificatoreMarca.text = '${s['audio_amplificatore_marca'] ?? ''}';
+      _microfoniNumero.text = '${s['audio_microfoni_numero'] ?? 0}';
+      _microfoniMarca.text = '${s['audio_microfoni_marca'] ?? ''}';
+      _qualita.text = '${s['audio_qualita'] ?? ''}';
+      _audioNote.text = '${s['audio_note'] ?? ''}';
+      _campaneNumero.text = '${s['campane_numero'] ?? 0}';
+      _programmatore.text = '${s['campane_programmatore'] ?? ''}';
+      _specificheImpianto.text = '${s['campane_specifiche_impianto'] ?? ''}';
+      _campaneNote.text = '${s['campane_note'] ?? ''}';
     }
-    for (final c in controllers.values) { c.dispose(); } tipo.dispose();
+    if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _elimina(bool audio, Map<String, dynamic> r) async {
-    final conferma = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Eliminare la scheda?'), content: const Text('Questa operazione non può essere annullata.'), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ANNULLA')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ELIMINA'))]));
-    if (conferma == true) { final db = await DatabaseHelper.instance.database; await db.delete(audio ? 'interventi_audio' : 'interventi_campane', where: 'id = ?', whereArgs: [r['id']]); await _carica(); }
+  int _numero(TextEditingController c) => int.tryParse(c.text.trim()) ?? 0;
+
+  Future<void> _salva() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await DatabaseHelper.instance.saveSchedaParrocchia(
+        clienteId: widget.cliente['id'] as int,
+        audioDiffusoriNumero: _numero(_diffusoriNumero),
+        audioDiffusoriMarca: _diffusoriMarca.text.trim(),
+        audioAmplificatoreMarca: _amplificatoreMarca.text.trim(),
+        audioMicrofoniNumero: _numero(_microfoniNumero),
+        audioMicrofoniMarca: _microfoniMarca.text.trim(),
+        audioQualita: _qualita.text.trim(),
+        audioNote: _audioNote.text.trim(),
+        campaneNumero: _numero(_campaneNumero),
+        campaneProgrammatore: _programmatore.text.trim(),
+        campaneSpecificheImpianto: _specificheImpianto.text.trim(),
+        campaneNote: _campaneNote.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Scheda parrocchia salvata.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
-  Widget _lista(bool audio) {
-    final records = audio ? _audio : _campane;
-    return Column(children: [Padding(padding: const EdgeInsets.all(12), child: Align(alignment: Alignment.centerRight, child: FilledButton.icon(onPressed: () => _nuovo(audio), icon: const Icon(Icons.add), label: Text('NUOVA SCHEDA ${audio ? 'AUDIO' : 'CAMPANE'}')))), Expanded(child: records.isEmpty ? Center(child: Text('Nessuna scheda intervento ${audio ? 'audio' : 'campane'} creata.')) : ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 12), itemCount: records.length, itemBuilder: (ctx, i) { final r = records[i]; final d = DateTime.tryParse('${r['data']}'); return Card(child: ListTile(leading: Icon(audio ? Icons.volume_up_outlined : Icons.notifications_none_outlined), title: Text('${r['tipo_intervento']}'), subtitle: Text('Data: ${d == null ? r['data'] : DateFormat('dd/MM/yyyy').format(d)}'), onTap: () => _nuovo(audio, r), trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'edit') _nuovo(audio, r); if (v == 'delete') _elimina(audio, r); }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Modifica')), PopupMenuItem(value: 'delete', child: Text('Elimina'))]))); }))]);
+  Future<void> _esportaPdf() async {
+    if (_loading || _saving) return;
+    setState(() => _saving = true);
+    try {
+      // Recupera la scheda dal database per assicurarsi che il PDF contenga
+      // esattamente gli ultimi dati salvati.
+      final clienteId = widget.cliente['id'] as int;
+      final scheda = await DatabaseHelper.instance.getSchedaParrocchia(clienteId);
+      if (scheda == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Salva prima la scheda parrocchia.')),
+        );
+        return;
+      }
+
+      final fontData = await rootBundle.load('assets/fonts/DejaVuSans.ttf');
+      final boldFontData = await rootBundle.load('assets/fonts/DejaVuSans-Bold.ttf');
+      final pdf = pw.Document(
+        theme: pw.ThemeData.withFont(
+          base: pw.Font.ttf(fontData),
+          bold: pw.Font.ttf(boldFontData),
+        ),
+      );
+
+      pw.MemoryImage? logo;
+      try {
+        final bytes = await rootBundle.load('assets/logo.png');
+        logo = pw.MemoryImage(Uint8List.fromList(bytes.buffer.asUint8List()));
+      } catch (_) {}
+
+      final gold = PdfColor.fromHex('#B8860B');
+      final lightGold = PdfColor.fromHex('#E8D9A5');
+      final cliente = (widget.cliente['nome'] ?? '').toString().trim();
+      final parrocchia = (widget.cliente['parrocchia'] ?? '').toString().trim();
+      final indirizzo = (widget.cliente['indirizzo'] ?? '').toString().trim();
+      final telefono = (widget.cliente['telefono'] ?? '').toString().trim();
+      final email = (widget.cliente['email'] ?? '').toString().trim();
+      final data = DateFormat('dd/MM/yyyy').format(DateTime.now());
+
+      String v(String key) => (scheda[key] ?? '').toString().trim();
+      String n(String key) => (scheda[key] ?? 0).toString();
+
+      pw.Widget titolo(String text) => pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: pw.BoxDecoration(
+          color: lightGold,
+          border: pw.Border.all(color: gold),
+        ),
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: gold),
+        ),
+      );
+
+      pw.Widget riga(String label, String value) {
+        return pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 4),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: 185,
+                child: pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              ),
+              pw.Expanded(child: pw.Text(value.isEmpty ? '—' : value)),
+            ],
+          ),
+        );
+      }
+
+      final logoImage = logo;
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.fromLTRB(32, 30, 32, 30),
+          build: (_) => [
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                if (logoImage != null)
+                  pw.SizedBox(width: 150, height: 90, child: pw.Image(logoImage, fit: pw.BoxFit.contain))
+                else
+                  pw.SizedBox(width: 150, child: pw.Text('GESTIONE IMPIANTI', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: gold))),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('SCHEDA TECNICA PARROCCHIA', style: pw.TextStyle(fontSize: 17, fontWeight: pw.FontWeight.bold, color: gold)),
+                      pw.SizedBox(height: 5),
+                      pw.Text('Data: $data'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('DATI PARROCCHIA', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: gold)),
+                  pw.SizedBox(height: 6),
+                  riga('Parrocchia', parrocchia),
+                  riga('Cliente', cliente),
+                  if (indirizzo.isNotEmpty) riga('Indirizzo', indirizzo),
+                  if (telefono.isNotEmpty) riga('Telefono', telefono),
+                  if (email.isNotEmpty) riga('Email', email),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+            titolo('IMPIANTO AUDIO'),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
+              child: pw.Column(
+                children: [
+                  riga('Numero diffusori', n('audio_diffusori_numero')),
+                  riga('Marca diffusori', v('audio_diffusori_marca')),
+                  riga('Amplificatore', v('audio_amplificatore_marca')),
+                  riga('Numero microfoni', n('audio_microfoni_numero')),
+                  riga('Marca microfoni', v('audio_microfoni_marca')),
+                  riga('Qualità dell’impianto', v('audio_qualita')),
+                  riga('Note / ultimi interventi', v('audio_note')),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+            titolo('CAMPANE'),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(border: pw.Border.all(color: lightGold)),
+              child: pw.Column(
+                children: [
+                  riga('Numero campane', n('campane_numero')),
+                  riga('Programmatore esistente', v('campane_programmatore')),
+                  riga('Specifiche impianto', v('campane_specifiche_impianto')),
+                  riga('Note / ultimi interventi', v('campane_note')),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 18),
+            pw.Divider(color: lightGold),
+            pw.Text('Scheda tecnica generata dall’app Gestione Preventivi.', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey)),
+          ],
+        ),
+      );
+
+      final pdfBytes = await pdf.save();
+      final safeName = (parrocchia.isEmpty ? cliente : parrocchia)
+          .replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_')
+          .replaceAll(RegExp(r'_+'), '_');
+      final filename = 'Scheda_Parrocchia_${safeName.isEmpty ? 'Senza_Nome' : safeName}.pdf';
+
+      if (Platform.isWindows) {
+        Directory? downloads;
+        try {
+          downloads = await getDownloadsDirectory();
+        } catch (_) {}
+        final directory = downloads ?? await getApplicationDocumentsDirectory();
+        final file = File(p.join(directory.path, filename));
+        await file.writeAsBytes(pdfBytes, flush: true);
+        await Process.run('explorer.exe', [file.path], runInShell: false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF salvato in: ${file.path}')),
+        );
+      } else {
+        final condiviso = await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+        if (!condiviso) throw Exception('Impossibile aprire la condivisione del PDF.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Errore nella creazione del PDF: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _numeroField(TextEditingController c, String label, IconData icon) {
+    return TextFormField(
+      controller: c,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+      ),
+    );
+  }
+
+  Widget _testo(TextEditingController c, String label, IconData icon,
+      {int maxLines = 1}) {
+    return TextFormField(
+      controller: c,
+      maxLines: maxLines,
+      textCapitalization: TextCapitalization.sentences,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        alignLabelWithHint: maxLines > 1,
+      ),
+    );
+  }
+
+  Widget _sezione({
+    required String titolo,
+    required IconData icona,
+    required List<Widget> children,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icona, color: Theme.of(context).colorScheme.primary, size: 28),
+                const SizedBox(width: 10),
+                Text(
+                  titolo,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...children.expand((w) => [w, const SizedBox(height: 12)]).toList()
+              ..removeLast(),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Schede intervento'), bottom: TabBar(controller: _tabs, tabs: const [Tab(icon: Icon(Icons.volume_up_outlined), text: 'Interventi audio'), Tab(icon: Icon(Icons.notifications_none_outlined), text: 'Interventi campane')])),
-    body: _loading ? const Center(child: CircularProgressIndicator()) : TabBarView(controller: _tabs, children: [_lista(true), _lista(false)]),
-  );
+  Widget build(BuildContext context) {
+    final nome = (widget.cliente['nome'] ?? '').toString();
+    final parrocchia = (widget.cliente['parrocchia'] ?? '').toString().trim();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Scheda Parrocchia'),
+        actions: [
+          IconButton(
+            tooltip: 'Scarica scheda PDF',
+            onPressed: _saving ? null : _esportaPdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+          ),
+          IconButton(
+            tooltip: 'Salva scheda',
+            onPressed: _saving ? null : _salva,
+            icon: const Icon(Icons.save_outlined),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
+                children: [
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.church_outlined)),
+                      title: Text(
+                        parrocchia.isEmpty ? 'Parrocchia non indicata' : parrocchia,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text('Cliente: $nome'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _sezione(
+                    titolo: 'Impianto Audio',
+                    icona: Icons.volume_up_outlined,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: _numeroField(_diffusoriNumero, 'Numero diffusori', Icons.speaker_group_outlined)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _testo(_diffusoriMarca, 'Marca diffusori', Icons.speaker_outlined)),
+                        ],
+                      ),
+                      _testo(_amplificatoreMarca, 'Marca / modello amplificatore', Icons.graphic_eq_outlined),
+                      Row(
+                        children: [
+                          Expanded(child: _numeroField(_microfoniNumero, 'Numero microfoni', Icons.mic_none_outlined)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _testo(_microfoniMarca, 'Marca microfoni', Icons.mic_outlined)),
+                        ],
+                      ),
+                      _testo(_qualita, 'Qualità dell’impianto', Icons.star_outline),
+                      _testo(
+                        _audioNote,
+                        'Note / ultimi interventi audio',
+                        Icons.notes_outlined,
+                        maxLines: 5,
+                      ),
+                    ],
+                  ),
+                  _sezione(
+                    titolo: 'Campane',
+                    icona: Icons.notifications_none_outlined,
+                    children: [
+                      _numeroField(_campaneNumero, 'Numero campane', Icons.numbers_outlined),
+                      _testo(_programmatore, 'Programmatore esistente', Icons.settings_remote_outlined),
+                      _testo(
+                        _specificheImpianto,
+                        'Specifiche dell’impianto campane',
+                        Icons.settings_outlined,
+                        maxLines: 4,
+                      ),
+                      _testo(
+                        _campaneNote,
+                        'Note / ultimi interventi campane',
+                        Icons.notes_outlined,
+                        maxLines: 5,
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _saving ? null : _salva,
+                          icon: _saving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.save),
+                          label: Text(_saving ? 'SALVATAGGIO...' : 'SALVA SCHEDA'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _saving ? null : _esportaPdf,
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          label: const Text('SCARICA PDF'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
   @override
-  void dispose() { _tabs.dispose(); super.dispose(); }
+  void dispose() {
+    _diffusoriNumero.dispose();
+    _diffusoriMarca.dispose();
+    _amplificatoreMarca.dispose();
+    _microfoniNumero.dispose();
+    _microfoniMarca.dispose();
+    _qualita.dispose();
+    _audioNote.dispose();
+    _campaneNumero.dispose();
+    _programmatore.dispose();
+    _specificheImpianto.dispose();
+    _campaneNote.dispose();
+    super.dispose();
+  }
 }
 
 class ClientiScreen extends StatefulWidget {
@@ -5788,7 +6145,7 @@ class _ClientiScreenState extends State<ClientiScreen> {
                               child: OutlinedButton.icon(
                                 onPressed: () => _apriSchedaParrocchia(c),
                                 icon: const Icon(Icons.church_outlined),
-                                label: const Text('SCHEDE INTERVENTO • AUDIO E CAMPANE'),
+                                label: const Text('SCHEDA PARROCCHIA • AUDIO E CAMPANE'),
                               ),
                             ),
                           ),
